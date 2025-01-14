@@ -1,0 +1,7 @@
+name = "OptimalBath"
+uuid = "ff45c333-ce72-433e-9e30-5feb6da7c95a"
+authors = ["martinsw01 <martin.s.winther@gmail.com>"]
+version = "1.0.0-DEV"
+
+[compat]
+julia = "1.10"
