@@ -69,3 +69,5 @@ jobs:
           using OptimalBath
           DocMeta.setdocmeta!(OptimalBath, :DocTestSetup, :(using OptimalBath); recursive=true)
           doctest(OptimalBath)
+      - name: Deploy docs
+        run: julia --project=docs/ docs/make.jl
