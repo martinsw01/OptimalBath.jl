@@ -18,6 +18,6 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="martisw01/OptimalBath.jl",
+    repo="martinsw01/OptimalBath.jl",
     devbranch="main",
 )
