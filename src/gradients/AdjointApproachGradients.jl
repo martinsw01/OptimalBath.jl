@@ -35,8 +35,8 @@ function _compute_gradient!(G, Λ, U, t, Δx)
     g = 9.81
     for j in 1:N
         temp_integral = sum(_height.(U[j,2:end]) .* _adjoint_momentum.(Λ[j, 2:end]) .* diff(t)) * g
-        G[j] += temp_integral
-        G[j+1] -= temp_integral
+        G[j] -= temp_integral
+        G[j+1] += temp_integral
     end
 end
 
