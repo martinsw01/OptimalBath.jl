@@ -14,7 +14,7 @@ end
 
 function compute_objective_and_gradient!(G, β, problem::SweOptimizationProblem, ad::ForwardADGradient)
     function solve_and_compute_objective(β)
-        U, t, x = solve(problem, β)
+        U, t, x = solve_primal(problem, β)
         objective = compute_objective(U, t, x, β, problem.interior_objective, problem.terminal_objective, problem.parameter_objective)
         return objective
     end

@@ -56,7 +56,7 @@ function _create_simulator(problem, β)
     return simulator
 end
 
-function solve(problem::SweOptimizationProblem, β)
+function solve_primal(problem::SweOptimizationProblem, β)
     FloatType = eltype(β)
     simulator = _create_simulator(problem, β)
 

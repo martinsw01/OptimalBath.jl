@@ -85,7 +85,7 @@ function compute_next_Λ(Λl, Λc, Λr, Ul, Uc, Ur, dJdU, bl, br, Δt, Δx)
 end
 
 
-function solve(Λ0, U, dJdU, b, t, Δx)
+function solve_adjoint(Λ0, U, dJdU, b, t, Δx)
     Λ = similar(U)
     N, M = size(U)
     Λ[:, end] .= Λ0

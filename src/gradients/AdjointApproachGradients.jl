@@ -3,12 +3,12 @@ using StaticArrays
 struct AdjointApproachGradient <: GradientType end
 
 function compute_objective_and_gradient!(G, β, problem::SweOptimizationProblem, ::AdjointApproachGradient)
-    U, t, x = solve(problem, β)
+    U, t, x = solve_primal(problem, β)
 
     dJdU = objective_density_gradient.(Volume(), problem.interior_objective, U)
     Δx = x[2] - x[1]
     Λ0 = objective_density_gradient.(Terminal(), problem.terminal_objective, U[:, end])
-    Λ = solve(Λ0, U, dJdU, β, t, Δx)
+    Λ = solve_adjoint(Λ0, U, dJdU, β, t, Δx)
     
     _compute_gradient!(G, Λ, U, t, Δx)
     objective = compute_objective(U, t, x, β, problem.interior_objective, problem.terminal_objective, problem.parameter_objective)

@@ -12,6 +12,9 @@ using Test
     end
 
 
+    @testset "Adjoint solver" begin
+        include("adjoint_solver_test.jl")
+    end
 end
 
 nothing
