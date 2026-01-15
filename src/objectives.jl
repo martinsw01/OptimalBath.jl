@@ -16,7 +16,9 @@ function Base.Broadcast.broadcastable(obj::Objective)
     return Ref(obj)
 end
 
-function objective_density(::IntegrationRegion, ::Objective, U) end
+function objective_density(::IntegrationRegion, ::Objective, U) 
+    error("objective_density not implemented for the given region and objective.")
+end
 
 function objective_density(::Volume, ::Energy, U)
     return 0.5 * (U[2]^2 / U[1] + 9.81 * U[1]^2)
@@ -26,17 +28,14 @@ function objective_density(::Volume, ::SquaredMomentum, U)
     return U[2]^2
 end
 
-function objective_density(::Volume, ::Mass, U)
+function objective_density(::IntegrationRegion, ::Mass, U)
     return U[1]
 end
 
-function objective_density(::Terminal, ::NoObjective, U)
+function objective_density(::IntegrationRegion, ::NoObjective, U)
     return zero(eltype(U))
 end
 
-function objective_density(::Volume, ::NoObjective, U)
-    return zero(eltype(U))
-end
 
 function objective_density_gradient(region::IntegrationRegion, obj::Objective, U)
     ForwardDiff.gradient(U) do u

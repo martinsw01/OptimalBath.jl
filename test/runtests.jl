@@ -11,6 +11,9 @@ using Test
         include("gradient_adjoint_test.jl")
     end
 
+    @testset "Objective" begin
+        include("objective_test.jl")
+    end
 
     @testset "Adjoint solver" begin
         include("adjoint_solver_test.jl")
