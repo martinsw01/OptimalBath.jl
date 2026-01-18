@@ -12,11 +12,36 @@ using StaticArrays
     Λ0 = fill(SVector{2}(0., 0.), N)
     dJdU = zero.(U)
 
-    Λ_expected = fill(SVector{2}(0., 0.), size(U)...)
+    Λ_expected = fill(SVector{2}(0., 0.), size(U))
     Λ = OptimalBath.solve_adjoint(Λ0, U, dJdU, b, t, Δx)
 
     @test Λ == Λ_expected
 end
+
+
+@testset "Test constant adjoint" begin
+    # Due to bc, the second component must be zero if constant
+
+    N = 5
+    M = 12
+
+    t = [0; cumsum(rand(M-1))]
+    Δx = 1.0
+    b = rand(N+1)
+    λ1 = rand()
+    λ2 = 0.0
+
+    U = rand(SVector{2, Float64}, N, M)
+    Λ0 = fill(SVector{2}(λ1, λ2), N)
+    dJdU = zero.(U)
+
+    Λ_expected = fill(SVector{2}(λ1, λ2), size(U))
+    Λ = OptimalBath.solve_adjoint(Λ0, U, dJdU, b, t, Δx)
+
+    d = [λ[2] for λ in Λ .- Λ_expected]
+    @test Λ ≈ Λ_expected
+end
+
 
 
 # @testset "Test adjoint with non-trivial terminal loss" begin

@@ -18,6 +18,10 @@ using Test
     @testset "Adjoint solver" begin
         include("adjoint_solver_test.jl")
     end
+
+    @testset "Implementation of interfaces" begin
+        include("test_utils.jl")
+    end
 end
 
 nothing
