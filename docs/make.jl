@@ -8,7 +8,7 @@ makedocs(;
     authors="martinsw01 <martin.s.winther@gmail.com>",
     sitename="OptimalBath.jl",
     format=Documenter.HTML(;
-        canonical="https://martisw01.github.io/OptimalBath.jl",
+        canonical="https://martinsw01.github.io/OptimalBath.jl",
         edit_link="main",
         assets=String[],
     ),
