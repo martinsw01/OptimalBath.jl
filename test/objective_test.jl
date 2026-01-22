@@ -1,3 +1,5 @@
+using StatsBase: sample
+
 function create_random_time_array(T, M)
     t = rand(M-2) * T
     sort!(t)
@@ -15,6 +17,24 @@ end
     objectives = OptimalBath.Objectives(interior_objective=OptimalBath.Mass())
     objective = OptimalBath.compute_objective(U, t, x, β, objectives)
     expected_objective = h * L * T
+    @test objective ≈ expected_objective atol=1e-6
+end
+
+@testset "Test objective_indices" begin
+
+    N, M = 5, 6
+    h, hu, L, T = rand(4)
+    x = range(0, stop=L, length=N+1)
+    t = create_random_time_array(T, M)
+    β = ones(N+1)
+    U = fill([h, hu], (N, M))
+
+    number_of_objective_cells = rand(2:N)
+    objective_indices = sample(1:N, number_of_objective_cells; replace=false)
+
+    objectives = OptimalBath.Objectives(interior_objective=OptimalBath.Mass(), objective_indices=objective_indices)
+    objective = OptimalBath.compute_objective(U, t, x, β, objectives)
+    expected_objective = h * L * T * (number_of_objective_cells / N)
     @test objective ≈ expected_objective atol=1e-6
 end
 

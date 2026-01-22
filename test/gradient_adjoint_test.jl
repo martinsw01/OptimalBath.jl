@@ -69,7 +69,7 @@ end
 
 @testset "Test selected design parameters" begin
     h, hu, λ1, λ2 = rand(4)
-    @show h, hu, λ1, λ2
+
     g = 9.81
     N = 10
     M = 6
