@@ -56,8 +56,8 @@ end
 
 function compute_bathymetry_source(Λ, bl, br, Δx)
     λ2 = Λ[2]
-    S2 = 9.81 * (br - bl) / Δx
-    return @SVector [0.0, S2 * λ2]
+    S2 = - 9.81 * (br - bl) / Δx
+    return @SVector [S2 * λ2, 0.0]
 end
 
 function compute_next_Λ_left_boundary(Λc, Λr, Uc, Ur, dJdU, bl, br, Δt, Δx)
@@ -86,6 +86,12 @@ end
 
 
 function solve_adjoint(Λ0, U, dJdU, b, t, Δx)
+    # subtract the bathymetry from U to get water heights
+    for i in axes(U, 1)
+        for n in axes(U, 2)
+            U[i, n] = @SVector [U[i, n][1] - 0.5*(b[i] + b[i+1]), U[i, n][2]]
+        end
+    end
     Λ = similar(U)
     N, M = size(U)
     Λ[:, end] .= Λ0
@@ -100,7 +106,8 @@ function solve_adjoint(Λ0, U, dJdU, b, t, Δx)
             Λ[i, n-1] = compute_next_Λ(Λ[i-1:i+1, n]...,
                                        U[i-1:i+1, n]...,
                                        dJdU[i, n],
-                                       b[i:i+1]...,
+                                       0.25*(b[i-1] + b[i]),
+                                       0.25*(b[i+1] + b[i+2]),
                                        Δt, Δx)
         end
         Λ[N, n-1] = compute_next_Λ_right_boundary(Λ[N-1:N, n]...,
