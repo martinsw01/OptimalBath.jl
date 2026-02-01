@@ -22,6 +22,14 @@ using Test
     @testset "Implementation of interfaces" begin
         include("test_utils.jl")
     end
+
+    # @testset "Forward vs reverse mode AD gradients" begin
+    #     include("ad_test.jl")
+    # end
+
+    @testset "Convert to depth" begin
+        include("convert_to_depth_test.jl")
+    end
 end
 
 nothing
