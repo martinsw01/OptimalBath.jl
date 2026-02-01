@@ -6,7 +6,8 @@ using Random
     N = 10
     M = 6
 
-    U = fill([h, hu], (N, M))
+    U = fill(State(h, hu), (N, M))
+    U = States{Average, Depth}(U)
     Λ = fill([λ1, λ2], (N, M))
 
     t = [0; cumsum(rand(M-1))]
@@ -52,7 +53,8 @@ end
     M = 4
 
     t = [0; cumsum(rand(M-1))]
-    U = [[h * mod(j, 2), hu] for j in 1:N, _ in 1:M]
+    U = [State(h * mod(j, 2), hu) for j in 1:N, _ in 1:M]
+    U = States{Average, Depth}(U)
     Λ = fill([λ1, λ2], (N, M))
 
     expected_gradient = h * λ2 .* [-1, 1, -1, 1, -1, 1, 0] * g * t[end]
@@ -74,7 +76,8 @@ end
     N = 10
     M = 6
 
-    U = fill([h, hu], (N, M))
+    U = fill(State(h, hu), (N, M))
+    U = States{Average, Depth}(U)
     Λ = fill([λ1, λ2], (N, M))
 
     t = [0; cumsum(rand(M-1))]

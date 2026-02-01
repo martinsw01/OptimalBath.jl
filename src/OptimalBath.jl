@@ -1,7 +1,6 @@
 module OptimalBath
 
-using Optim
-
+include("interfaces/states.jl")
 include("interfaces/gradients.jl")
 include("interfaces/forward_solvers.jl")
 

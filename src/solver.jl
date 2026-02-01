@@ -24,14 +24,19 @@ struct SweOptimizationProblem
     end       
 end
 
+using Optim
+using NLSolversBase: only_fg!
+
 function solve(problem::SweOptimizationProblem, gradient::GradientType, initial)
 
-    fg! = Optim.only_fg!() do F, G, β
+    fg! = only_fg!() do F, G, β
         objective = compute_objective_and_gradient!(G, β, problem.primal_swe_problem, problem.gradient_data, gradient)
         return objective
     end
     
-    res = Optim.optimize(fg!, initial, Optim.BFGS(), Optim.Options(iterations = 6, show_trace = true))
+    opt_options = Optim.Options(iterations = 6, show_trace = true)
+
+    res = Optim.optimize(fg!, initial, Optim.BFGS(), opt_options)
     
     return res
 end

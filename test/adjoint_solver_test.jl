@@ -9,10 +9,11 @@ using StaticArrays
     b = -rand(N+1)
 
     U = rand(SVector{2, Float64}, N, M)
+    U = States{Average, Depth}(U)
     Λ0 = fill(SVector{2}(0., 0.), N)
-    dJdU = zero.(U)
+    dJdU = zero.(U.U)
 
-    Λ_expected = fill(SVector{2}(0., 0.), size(U))
+    Λ_expected = fill(SVector{2}(0., 0.), size(U.U))
     Λ = OptimalBath.solve_adjoint(Λ0, U, dJdU, b, t, Δx)
 
     @test Λ == Λ_expected
@@ -32,10 +33,11 @@ end
     λ2 = 0.0
 
     U = rand(SVector{2, Float64}, N, M)
+    U = States{Average, Depth}(U)
     Λ0 = fill(SVector{2}(λ1, λ2), N)
-    dJdU = zero.(U)
+    dJdU = zero.(U.U)
 
-    Λ_expected = fill(SVector{2}(λ1, λ2), size(U))
+    Λ_expected = fill(SVector{2}(λ1, λ2), size(U.U))
     Λ = OptimalBath.solve_adjoint(Λ0, U, dJdU, b, t, Δx)
 
     @test Λ ≈ Λ_expected

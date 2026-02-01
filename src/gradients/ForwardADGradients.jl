@@ -7,7 +7,7 @@ A gradient computation strategy using ForwardDiff for automatic differentiation.
 Stores two preallocated buffers: one for the bathymetry and one for the gradient results.
 The bathymetry starts as a copy of the initial bathymetry, and is updated during gradient computations.
 """
-struct ForwardADGradient{GradientBuffer, BathymetryBuffer} <: GradientType
+struct ForwardADGradient{GradientBuffer, BathymetryBuffer} <: ADGradient
     gradient_buffer::GradientBuffer
     bathymetry_buffer::BathymetryBuffer
     function ForwardADGradient(bathymetry::AbstractArray, β::AbstractArray=bathymetry)
@@ -30,29 +30,13 @@ function create_bathymetry_buffer(bathymetry, β)
     return PreallocationTools.DiffCache(bathymetry)
 end
 
-
-function compute_objective_and_gradient!(G, β, primal_swe_problem::PrimalSWEProblem, objectives::Objectives, ad::ForwardADGradient)
-    function solve_and_compute_objective(β)
-        # # update_bathymetry!(ad, objectives.design_indices, β)
-        # bathymetry = zeros(eltype(β), size(ad.bathymetry_buffer))
-        # bathymetry .= ad.bathymetry_buffer
-        # # bathymetry = ad.bathymetry_buffer
-        # # bathymetry[objectives.design_indices] .= β
-        bathymetry = update_and_get_bathymetry!(ad, objectives.design_indices, β)
-
-        U, t, x = solve_primal(primal_swe_problem, bathymetry)
-        objective = compute_objective(U, t, x, β, objectives)
-        return objective
-    end
-    ForwardDiff.gradient!(ad.gradient_buffer, solve_and_compute_objective, β)
-    objective = get_objective(ad)
-    G .= get_gradient(ad)
-    return objective
+function gradient!(ad::ForwardADGradient, f, β)
+    ForwardDiff.gradient!(ad.gradient_buffer, f, β)
 end
 
-function update_and_get_bathymetry!(ad::ForwardADGradient, indices, β)
+function update_and_get_bathymetry!(ad::ForwardADGradient, swe_problem::PrimalSWEProblem, indices, β)
     bathymetry = get_tmp(ad.bathymetry_buffer, first(β))
-    bathymetry[indices] .= β
+    bathymetry[indices] .= β + swe_problem.initial_bathymetry[indices]
     return bathymetry
 end
 

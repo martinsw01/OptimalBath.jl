@@ -1,4 +1,4 @@
-export solve
+export solve_adjoint
 
 using StaticArrays
 
@@ -85,13 +85,8 @@ function compute_next_Λ(Λl, Λc, Λr, Ul, Uc, Ur, dJdU, bl, br, Δt, Δx)
 end
 
 
-function solve_adjoint(Λ0, U, dJdU, b, t, Δx)
-    # subtract the bathymetry from U to get water heights
-    for i in axes(U, 1)
-        for n in axes(U, 2)
-            U[i, n] = @SVector [U[i, n][1] - 0.5*(b[i] + b[i+1]), U[i, n][2]]
-        end
-    end
+function solve_adjoint(Λ0, U::States{Average, Depth, T, D, A}, dJdU, b, t, Δx) where {T, D, A}
+    U = U.U
     Λ = similar(U)
     N, M = size(U)
     Λ[:, end] .= Λ0

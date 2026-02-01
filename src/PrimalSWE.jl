@@ -47,21 +47,49 @@ function _create_simulator(problem, β)
     return simulator
 end
 
-function solve_primal(problem::SinFVMPrimalSWEProblem, β = zero(problem.initial_bathymetry))
+function recording_callback(problem::SinFVMPrimalSWEProblem,
+                            U0::States{Average, Elevation, T}, t0) where T
+    U = States{Average, Elevation}(ElasticMatrix(reshape(U0.U, :, 1)))
+    t = ElasticVector([t0])
+
+    record_state = create_callback(problem) do U_n, t_n, Δt
+        append!(U.U, U_n.U)
+        append!(t, t_n)
+    end
+
+    return record_state, U, t
+end
+
+function create_callback(f, ::SinFVMPrimalSWEProblem)
+    function callback(t_n, simulator)
+        U = SinFVM.current_interior_state(simulator)
+        Δt = SinFVM.current_timestep(simulator)
+        f(States{Average, Elevation}(U), t_n, Δt)
+    end
+    return callback
+end
+
+function solve_primal(problem::SinFVMPrimalSWEProblem, β)
     FloatType = eltype(β)
+    t0 = zero(FloatType)
+    callback, U, t = recording_callback(problem, problem.u0, t0)
+    solve_primal(problem, β, callback)
+    x = CellFaces(SinFVM.cell_faces(problem._grid))
+    return U, t, x
+end
+
+function solve_primal(problem::SinFVMPrimalSWEProblem, β, callback)
     simulator = _create_simulator(problem, β)
 
     SinFVM.set_current_state!(simulator, problem.u0)
 
-    U = ElasticMatrix(reshape(SinFVM.current_interior_state(simulator), :, 1))
-    t = ElasticVector([zero(FloatType)])
+    SinFVM.simulate_to_time(simulator, problem.T; callback=callback)
+end
 
-    function collect_state(t_n, simulator)
-        append!(U, SinFVM.current_interior_state(simulator))
-        append!(t, t_n)
-    end
+function compute_Δx(problem::SinFVMPrimalSWEProblem)
+    return SinFVM.compute_dx(problem._grid)
+end
 
-    SinFVM.simulate_to_time(simulator, problem.T; callback=collect_state)
-    
-    return U, t, SinFVM.cell_faces(problem._grid)
+function initial_state(problem::SinFVMPrimalSWEProblem)
+    return States{Average, Elevation}(problem.u0)
 end

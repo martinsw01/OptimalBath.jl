@@ -13,7 +13,7 @@ end
     x = range(0, stop=L, length=N+1)
     t = create_random_time_array(T, M)
     β = ones(N+1)
-    U = fill([h, hu], (N, M))
+    U = States{Average, Depth}(fill(State(h, hu), N, M))
     objectives = OptimalBath.Objectives(interior_objective=OptimalBath.Mass())
     objective = OptimalBath.compute_objective(U, t, x, β, objectives)
     expected_objective = h * L * T
@@ -27,7 +27,7 @@ end
     x = range(0, stop=L, length=N+1)
     t = create_random_time_array(T, M)
     β = ones(N+1)
-    U = fill([h, hu], (N, M))
+    U = States{Average, Depth}(fill(State(h, hu), N, M))
 
     number_of_objective_cells = rand(2:N)
     objective_indices = sample(1:N, number_of_objective_cells; replace=false)
@@ -46,7 +46,7 @@ end
     x = range(0, stop=L, length=N+1)
     t = create_random_time_array(T, M)
     β = ones(N+1)
-    U = [[xj, rand()] for xj in 0:L, _ in 1:M]
+    U = States{Average, Depth}([State(xj, rand()) for xj in 0:L, _ in 1:M])
     objectives = OptimalBath.Objectives(interior_objective=OptimalBath.Mass())
     objective = OptimalBath.compute_objective(U, t, x, β, objectives)
     expected_objective = 0.5 * L^2 * T
@@ -60,7 +60,7 @@ end
     x = range(0, stop=L, length=N+1)
     t = create_random_time_array(T, M)
     β = ones(N+1)
-    U = [[h0 * tn, rand()] for _ in 1:N, tn in t]
+    U = States{Average, Depth}([State(h0 * tn, rand()) for _ in 1:N, tn in t])
     objectives = OptimalBath.Objectives(interior_objective=OptimalBath.Mass())
     objective = OptimalBath.compute_objective(U, t, x, β, objectives)
     expected_objective = 0.5 * h0 * L * T^2
@@ -74,8 +74,8 @@ end
     x = range(0, stop=L, length=N+1)
     t = create_random_time_array(T, M)
     β = ones(N+1)
-    U = fill([rand(), rand()], (N, M))
-    U[:, end] .= ([h * (j/(N-1)), rand()] for j in 0:(N-1))
+    U = States{Average, Depth}(fill(State(rand(), rand()), N, M))
+    U.U[:, end] .= (State(h * (j/(N-1)), rand()) for j in 0:(N-1))
 
 
     objectives = OptimalBath.Objectives(terminal_objective=OptimalBath.Mass())
