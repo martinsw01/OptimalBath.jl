@@ -9,23 +9,29 @@ struct AdjointApproachGradient{BathymetryBuffer} <: GradientType
 end
 
 function compute_objective_and_gradient!(G, β, primal_swe_problem::PrimalSWEProblem, objectives::Objectives, aag::AdjointApproachGradient)
-    update_bathymetry!(aag, objectives.design_indices, β)
-    U, t, x = solve_primal(primal_swe_problem, aag.bathymetry_buffer)
-    U = unsafe_to_depth!(U, aag.bathymetry_buffer)
+    δb = extrapolate_β_to_full_domain(β, objectives.design_indices, length(initial_state(primal_swe_problem).U))
 
-    dJdU = zero(U.U)
-    dJdU[objectives.objective_indices, :] .= objective_density_gradient(objectives.interior_objective, U, objectives.objective_indices, :)
+    (Ul, Ur), t, x = solve_primal(primal_swe_problem, δb)
+
+    dJdU = zero(Ul.U)
+    dJdU[objectives.objective_indices, :] .+= 0.5 * objective_density_gradient(objectives.interior_objective, Ul, objectives.objective_indices, :)
+    dJdU[objectives.objective_indices, :] .+= 0.5 * objective_density_gradient(objectives.interior_objective, Ur, objectives.objective_indices, :)
     
     Δx = x[2] - x[1]
-    Λ0 = objective_density_gradient(objectives.terminal_objective, U, :, lastindex(t))
-    Λ = solve_adjoint(Λ0, U, dJdU, aag.bathymetry_buffer, t, Δx)
-    
+    Λ0 = zero(Ul.U[:, end])
+    Λ0[objectives.objective_indices] .+= 0.5 * objective_density_gradient(objectives.terminal_objective, Ul, objectives.objective_indices, lastindex(t))
+    Λ0[objectives.objective_indices] .+= 0.5 * objective_density_gradient(objectives.terminal_objective, Ur, objectives.objective_indices, lastindex(t))
+
+    Λ = solve_adjoint(Λ0, Ul, Ur, dJdU, primal_swe_problem.initial_bathymetry .+ δb, t, Δx)
+
+    @warn "Uses only one side of the reconstruction of U"
+    U = States{Average, Depth}(Ul.U)
     compute_gradient!(G, Λ, U, t, Δx, objectives.design_indices)
     objective = compute_objective(U, t, x, β, objectives)
 end
 
 function update_bathymetry!(aag::AdjointApproachGradient, indices, β)
-    aag.bathymetry_buffer[indices] .= β
+    aag.bathymetry_buffer[indices] .+= β
 end
 
 function _height(U)
