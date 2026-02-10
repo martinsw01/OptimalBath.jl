@@ -24,26 +24,20 @@ function compute_objective_and_gradient!(G, β, primal_swe_problem::PrimalSWEPro
 
     Λ = solve_adjoint(Λ0, Ul, Ur, dJdU, primal_swe_problem.initial_bathymetry .+ δb, t, Δx)
 
-    @warn "Uses only one side of the reconstruction of U"
-    U = States{Average, Depth}(Ul.U)
-    compute_gradient!(G, Λ, U, t, Δx, objectives.design_indices)
-    objective = compute_objective(U, t, x, β, objectives)
+    compute_gradient!(G, Λ, Ul, Ur, t, objectives.design_indices)
+    objective = compute_objective(Ul, Ur, t, x, β, objectives)
 end
 
 function update_bathymetry!(aag::AdjointApproachGradient, indices, β)
     aag.bathymetry_buffer[indices] .+= β
 end
 
-function _height(U)
-    return U[1]
+function integrate(U, Λ, t, j)
+    g = 9.81
+    return sum(height.(U[j,2:end]) .* momentum.(Λ[j, 2:end]) .* diff(t)) * g
 end
 
-function _adjoint_momentum(Λ)
-    return Λ[2]
-end
-
-function compute_gradient!(G, Λ, U::States{Average, Depth, T, D, A}, t, Δx, design_indices::Colon) where {T, D, A}
-    U = U.U
+function _compute_gradient!(G, Λ, U, t, design_indices::Colon)
     G .= zero(eltype(G))
     N, M = size(U)
     for j in 1:N
@@ -53,16 +47,8 @@ function compute_gradient!(G, Λ, U::States{Average, Depth, T, D, A}, t, Δx, de
     end
 end
 
-
-function integrate(U, Λ, t, j)
-    g = 9.81
-    return sum(_height.(U[j,2:end]) .* _adjoint_momentum.(Λ[j, 2:end]) .* diff(t)) * g
-end
-
-function compute_gradient!(G, Λ, U::States{Average, Depth, T, D, A}, t, Δx, design_indices) where {T, D, A}
-    U = U.U
+function _compute_gradient!(G, Λ, U, t, design_indices)
     N, M = size(U)
-    g = 9.81
     for (i, j) in enumerate(design_indices)
         if j == 1
             G[i] = -integrate(U, Λ, t, j)
@@ -72,4 +58,12 @@ function compute_gradient!(G, Λ, U::States{Average, Depth, T, D, A}, t, Δx, de
             G[i] = integrate(U, Λ, t, j - 1) - integrate(U, Λ, t, j)
         end
     end
+end
+
+function compute_gradient!(G, Λ, U::States{Average, Depth, T, D, A}, t, design_indices) where {T, D, A}
+    _compute_gradient!(G, Λ, U.U, t, design_indices)
+end
+
+function compute_gradient!(G, Λ, Ul::States{Left, Depth, T, D, A}, Ur::States{Right, Depth, T, D, A}, t, design_indices) where {T, D, A}
+    _compute_gradient!(G, Λ, 0.5 .* (Ul.U .+ Ur.U), t, design_indices)
 end
