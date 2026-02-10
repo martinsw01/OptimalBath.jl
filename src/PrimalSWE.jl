@@ -14,20 +14,20 @@ struct SinFVMPrimalSWEProblem <: PrimalSWEProblem
     u0
     T
     function SinFVMPrimalSWEProblem(N,
-                              u0,
+                              u0::States{Average, Elevation, FloatType, D, A},
                               T;
                               domain = [0.0 1.0],
-                              _make_backend=SinFVM.make_cpu_backend,
+                              make_backend=SinFVM.make_cpu_backend,
                               initial_bathymetry=zeros(N + 1),
-                              _grid=SinFVM.CartesianGrid(N; gc=2, boundary=SinFVM.WallBC(), extent = domain),
-                              _reconstruction=SinFVM.LinearReconstruction(1.),
-                              _timestepper=SinFVM.RungeKutta2())
+                              grid=SinFVM.CartesianGrid(N; gc=2, boundary=SinFVM.WallBC(), extent = domain),
+                              reconstruction=BathymetryHandlingReconstruction(),
+                              timestepper=SinFVM.RungeKutta2()) where {FloatType, D, A}
         @assert length(initial_bathymetry) == N + 1 "Bathymetry must have length N+1=$(N + 1) ≠ $(length(initial_bathymetry))"
-        return new(_make_backend,
+        return new(make_backend,
                    initial_bathymetry,
-                   _grid,
-                   _reconstruction,
-                   _timestepper,
+                   grid,
+                   reconstruction,
+                   timestepper,
                    u0,
                    T)
     end       
@@ -36,20 +36,24 @@ end
 function _create_simulator(problem, β)
     FloatType = eltype(β)
     backend = problem._make_backend(FloatType)
-    b = vcat(zeros(FloatType, 2),
+    b = vcat(reverse(problem.initial_bathymetry[1:2] .+ β[1:2]),
              problem.initial_bathymetry .+ β,
-             zeros(FloatType, 2))
+             reverse(problem.initial_bathymetry[end-1:end] .+ β[end-1:end]))
     bathymetry = SinFVM.BottomTopography1D(b, backend, problem._grid)
     equation = SinFVM.ShallowWaterEquations1D(bathymetry)
     numericalflux = SinFVM.CentralUpwind(equation)
-    conserved_system = SinFVM.ConservedSystem(backend, problem._reconstruction, numericalflux, equation, problem._grid, [SinFVM.SourceTermBottom()])
+    conserved_system = SinFVM.ConservedSystem(backend, problem._reconstruction, numericalflux, equation, problem._grid, [DryFrontTerm()])
     simulator = SinFVM.Simulator(backend, conserved_system, problem._timestepper, problem._grid, cfl=0.2)
+
+    U_adjusted = adjust_to_bathymetry_changes(problem.u0, β)
+    SinFVM.set_current_state!(simulator, U_adjusted.U)
     return simulator
 end
 
 function recording_callback(problem::SinFVMPrimalSWEProblem,
-                            U0::States{Average, Elevation, T}, t0) where T
-    U = States{Average, Elevation}(ElasticMatrix(reshape(U0.U, :, 1)))
+                            simulator, t0)
+    U0 = SinFVM.current_interior_state(simulator)
+    U = States{Average, Elevation}(ElasticMatrix(reshape(U0, :, 1)))
     t = ElasticVector([t0])
 
     record_state = create_callback(problem) do U_n, t_n, Δt
@@ -58,6 +62,21 @@ function recording_callback(problem::SinFVMPrimalSWEProblem,
     end
 
     return record_state, U, t
+end
+
+
+function recording_reconstructions_callback(problem::SinFVMPrimalSWEProblem, simulator, t0)
+    Ul0 = simulator.system.left_buffer[3:end-2]
+    Ur0 = simulator.system.right_buffer[3:end-2]
+    Ul = States{Left, Depth}(ElasticMatrix(reshape(Ul0, :, 1)))
+    Ur = States{Right, Depth}(ElasticMatrix(reshape(Ur0, :, 1)))
+    t = ElasticVector([t0])
+    function record_state(t_n, simulator)
+        append!(Ul.U, simulator.system.left_buffer[3:end-2])
+        append!(Ur.U, simulator.system.right_buffer[3:end-2])
+        append!(t, t_n)
+    end
+    return record_state, (Ul, Ur), t
 end
 
 function create_callback(f, ::SinFVMPrimalSWEProblem)
@@ -72,16 +91,19 @@ end
 function solve_primal(problem::SinFVMPrimalSWEProblem, β)
     FloatType = eltype(β)
     t0 = zero(FloatType)
-    callback, U, t = recording_callback(problem, problem.u0, t0)
-    solve_primal(problem, β, callback)
-    x = CellFaces(SinFVM.cell_faces(problem._grid))
+
+    simulator = _create_simulator(problem, β)
+
+    callback, U, t = recording_reconstructions_callback(problem, simulator, t0)
+
+    SinFVM.simulate_to_time(simulator, problem.T; callback=callback)
+
+    x = SinFVM.cell_faces(problem._grid)
     return U, t, x
 end
 
 function solve_primal(problem::SinFVMPrimalSWEProblem, β, callback)
     simulator = _create_simulator(problem, β)
-
-    SinFVM.set_current_state!(simulator, problem.u0)
 
     SinFVM.simulate_to_time(simulator, problem.T; callback=callback)
 end
