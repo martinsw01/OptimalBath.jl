@@ -1,4 +1,4 @@
-export State, height, momentum, States, ValueType, Left, Average, Right, HeightReference, Depth, Elevation, CellCenters, CellFaces, to_depth!, unsafe_to_depth!, to_depth
+export State, height, momentum, States, ValueType, Left, Average, Right, HeightReference, Depth, Elevation, to_depth!, unsafe_to_depth!, to_depth
 
 using StaticArrays
 
@@ -30,20 +30,12 @@ end
 # Base.setindex!(U::States, v, I...) = (U.U[I...] = v)
 # Base.IndexStyle(::Type{<:States{VT, HR, T, N, A}}) where {VT, HR, T, N, A} = Base.IndexStyle(A)
 
-abstract type Grid end
-struct CellCenters{T, A<:AbstractArray{T}} <: Grid
-    x::A
-end
-struct CellFaces{T, A<:AbstractArray{T}} <: Grid
-    x::A
-end
-
 function side(b, ::Type{Left})
-    return b[1:end-1]
+    return @view b[1:end-1]
 end
 
 function side(b, ::Type{Right})
-    return b[2:end]
+    return @view b[2:end]
 end
 
 function unsafe_to_depth!(U::States{S, Elevation, T, N, A}, b) where {S, T, N, A}
@@ -52,20 +44,55 @@ function unsafe_to_depth!(U::States{S, Elevation, T, N, A}, b) where {S, T, N, A
     return V
 end
 
+function compute_new_depth(U::State, b::T) where {T}
+    h = height(U)
+    p = momentum(U)
+    h_depth = max(h - b, zero(T))
+    # h_depth = h - b
+    return State{T}(h_depth, p)
+end
+
+function compute_new_depth(U, bl::T, br::T) where {T}
+    compute_new_depth(U, 0.5 * (bl + br))
+end
+
 function to_depth!(U::States{Average, Depth, T, N, A},
                    V::States{Average, Elevation, TT, N, AA},
-                   b) where {T, N, A, TT, AA}
-    U.U .= State.(height.(V.U) .- 0.5 * (side(b, Left) .+ side(b, Right)), momentum.(V.U))
+                   b::AbstractArray{T}) where {T, N, A, TT, AA}
+    U.U .= compute_new_depth.(V.U, side(b, Left), side(b, Right))
 end
 
 function to_depth!(U::States{S, Depth, T, N, A},
                    V::States{S, Elevation, TT, N, AA},
-                   b) where {S, T, N, A, TT, AA}
-    U.U .= State.(height.(V.U) .- side(b, S), momentum.(V.U))
+                   b::AbstractArray{T}) where {S, T, N, A, TT, AA}
+    U.U .= compute_new_depth.(V.U, side(b, S))
 end
 
 function to_depth(U::States{VT, Elevation, T, N, A}, b::AbstractArray{TT}) where {VT, T, N, A, TT}
     U_depth = States{VT, Depth}(similar(U.U, State{promote_type(T, TT)}))
     to_depth!(U_depth, U, b)
     return U_depth
+end
+
+function adjust_to_bathymetry_changes!(U::States{Average, HR, T, N, A},
+                                       V::States{Average, HR, TT, N, AA},
+                                       β::AbstractArray{T}) where {HR, T, N, A, TT, AA}
+    h = similar(U.U, T)
+    h .= height.(V.U)
+    h .+= 0.5 .* (side(β, Left) .+ side(β, Right))
+    U.U .= State.(h, momentum.(V.U))
+end
+
+function adjust_to_bathymetry_changes!(U::States{Average, HR, T, N, A},
+                                       β::AbstractArray{T}) where {HR, T, N, A}
+    iszero(β) && return
+    adjust_to_bathymetry_changes!(U, U, β)
+end
+
+function adjust_to_bathymetry_changes(U::States{Average, HR, T, N, A},
+                                      β::AbstractArray{TT}) where {HR, T, N, A, TT}
+    T_promoted = State{promote_type(T, TT)}
+    U_adj = States{Average, HR}(similar(U.U, T_promoted))
+    adjust_to_bathymetry_changes!(U_adj, U, β)
+    return U_adj
 end
