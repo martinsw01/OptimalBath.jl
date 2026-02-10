@@ -20,19 +20,25 @@ function get_gradient end
 """
 function update_and_get_bathymetry! end
 
+function extrapolate_β_to_full_domain(β, design_indices, N)
+    full_β = zeros(eltype(β), N+1)
+    full_β[design_indices] .= β
+    return full_β
+end
 
 function compute_objective_and_gradient!(G, β, primal_swe_problem::PrimalSWEProblem, objectives::Objectives, ad::ADGradient)
     function solve_and_compute_objective(β)
-        b = update_and_get_bathymetry!(ad, primal_swe_problem, objectives.design_indices, β)
+        db = extrapolate_β_to_full_domain(β, objectives.design_indices, length(initial_state(primal_swe_problem).U))
+        adjusted_bathymetry = db .+ primal_swe_problem.initial_bathymetry
 
         objective = objectives.regularization(β)
 
         Δx = compute_Δx(primal_swe_problem)
-        U_depth = to_depth(initial_state(primal_swe_problem), b)
+        U_depth = to_depth(initial_state(primal_swe_problem), adjusted_bathymetry)
         f_prev = sum(objective_density(objectives.interior_objective, U_depth, objectives.objective_indices))
 
         function integrate_objective_one_step(U_n, t_n, Δt)
-            to_depth!(U_depth, U_n, b)
+            to_depth!(U_depth, U_n, adjusted_bathymetry)
             f_next = sum(objective_density(objectives.interior_objective, U_depth, objectives.objective_indices))
             objective += 0.5 * (f_next + f_prev) * Δt * Δx
             f_prev = f_next
@@ -40,7 +46,11 @@ function compute_objective_and_gradient!(G, β, primal_swe_problem::PrimalSWEPro
 
         integration_callback = create_callback(integrate_objective_one_step, primal_swe_problem)
 
-        solve_primal(primal_swe_problem, b, integration_callback)
+        solve_primal(primal_swe_problem, db, integration_callback)
+
+        objective += sum(objective_density(objectives.terminal_objective,
+                                           U_depth,
+                                           objectives.objective_indices)) * Δx
 
         return objective
     end
@@ -53,4 +63,4 @@ function compute_objective_and_gradient!(G, β, primal_swe_problem::PrimalSWEPro
 end
 
 include("ForwardADGradients.jl")
-# include("ReverseADGradients.jl")
+include("ReverseADGradients.jl")
