@@ -30,6 +30,10 @@ using Test
     @testset "Convert to depth" begin
         include("convert_to_depth_test.jl")
     end
+
+    @testset "Reconstruction tests" begin
+        include("reconstruction_test.jl")
+    end
 end
 
 nothing

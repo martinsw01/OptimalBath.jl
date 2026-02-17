@@ -90,7 +90,12 @@ end
 
     U, t, x = solve_primal(test_problem, bathymetry)
     U = to_depth(U, bathymetry)
-    objectives = OptimalBath.Objectives(design_indices=design_indices, interior_objective=OptimalBath.Mass())
+
+    objectives = OptimalBath.Objectives(design_indices=design_indices,
+                                        interior_objective=OptimalBath.Mass(),
+                                        terminal_objective=OptimalBath.Energy(),
+                                        regularization=(β) -> sum(abs2, β)
+                                        )
 
     gradient_type = TestADGradient()
     objective, _ = OptimalBath.compute_objective_and_gradient(β, test_problem, objectives, gradient_type)

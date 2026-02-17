@@ -40,6 +40,10 @@ function numerical_flux(Λl, Λr, Ul, Ur)
     a⁺ = max(0, eig_left[1], eig_right[1])
     a⁻ = min(0, eig_left[2], eig_right[2])
 
+    if a⁺ - a⁻ < desingularizing_kappa # Dry interface
+        return 0.5 * (fl + fr)
+    end
+
     return (a⁺ * fl - a⁻ * fr + a⁻ * a⁺ * (Λr - Λl)) / (a⁺ - a⁻)
 end
 
@@ -210,8 +214,8 @@ function compute_next_Λ_right_boundary(Λl, Λc, Uc⁻, Ul⁺, Uc⁺, dJdU, bl,
 end
 
 function compute_semi_discrete_derivative(Λl, Λc, Λr, Uc⁻, Ur⁻, Ul⁺, Uc⁺, dJdU, bl, br, Δt, Δx)        
-    Fl = numerical_flux(Λl, Λc, Ul⁺, Uc⁻)
-    Fr = numerical_flux(Λc, Λr, Uc⁺, Ur⁻)
+    Fl = numerical_flux_improved(Λl, Λc, Ul⁺, Uc⁻, Δx)
+    Fr = numerical_flux_improved(Λc, Λr, Uc⁺, Ur⁻, Δx)
     dfₓᵀΛ = compute_flux_source_improved(Λc, Uc⁻, Uc⁺, Δx)
     SᵀΛ = compute_bathymetry_source_improved(Λc, Uc⁻, Uc⁺, bl, br, Δx)
     return - (Fr - Fl)/Δx - dfₓᵀΛ + SᵀΛ + dJdU
@@ -250,4 +254,19 @@ function compute_flux_source_improved(Λ, Ul, Ur, Δx)
         
     dfₓᵀ = (swe_jacobian_transpose(hr, pr) - swe_jacobian_transpose(hl, pl)) / Δx
     return dfₓᵀ * Λ
+end
+
+function numerical_flux_improved(Λl, Λr, Ul, Ur, Δx)
+    hl, pl = Ul
+    hr, pr = Ur
+
+    # Regularization:
+    if hl < Δx
+        pl *= hl
+    end
+    if hr < Δx
+        pr *= hr
+    end
+
+    return numerical_flux(Λl, Λr, State(hl, pl), State(hr, pr))
 end

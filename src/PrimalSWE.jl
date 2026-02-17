@@ -47,7 +47,13 @@ function _create_simulator(problem, β)
 
     U_adjusted = adjust_to_bathymetry_changes(problem.u0, β)
     SinFVM.set_current_state!(simulator, U_adjusted.U)
+    initialize_reconstruction!(simulator)
     return simulator
+end
+
+function initialize_reconstruction!(simulator)
+    # Perform one reconstruction to initialize the buffers, which are needed for the recording callback.
+    SinFVM.reconstruct!(simulator.backend, simulator.system.reconstruction, simulator.system.left_buffer, simulator.system.right_buffer, simulator.substep_outputs[1], simulator.grid, simulator.system.equation, SinFVM.XDIR)
 end
 
 function recording_callback(problem::SinFVMPrimalSWEProblem,
@@ -65,7 +71,7 @@ function recording_callback(problem::SinFVMPrimalSWEProblem,
 end
 
 
-function recording_reconstructions_callback(problem::SinFVMPrimalSWEProblem, simulator, t0)
+function recording_reconstructions_callback(simulator, t0)
     Ul0 = simulator.system.left_buffer[3:end-2]
     Ur0 = simulator.system.right_buffer[3:end-2]
     Ul = States{Left, Depth}(ElasticMatrix(reshape(Ul0, :, 1)))
@@ -94,7 +100,7 @@ function solve_primal(problem::SinFVMPrimalSWEProblem, β)
 
     simulator = _create_simulator(problem, β)
 
-    callback, U, t = recording_reconstructions_callback(problem, simulator, t0)
+    callback, U, t = recording_reconstructions_callback(simulator, t0)
 
     SinFVM.simulate_to_time(simulator, problem.T; callback=callback)
 
@@ -125,31 +131,51 @@ A linear reconstruction similar to SinFVM.LinearReconstruction, but caps heights
 """
 struct BathymetryHandlingReconstruction <: Reconstruction end
 
-function clip_to_zero(U, b)
-    h = height(U)
-    if h > b
-        return State(h - b, momentum(U))
-    else
+function convert_to_depth(U, b, ε)
+    h, p = U
+    if is_interface_dry(U, b, ε)
         return zero(U)
+    else
+        return State(h - b, p)
     end
 end
 
-function reconstruct_cell(U, B_left, B_right)
-    slope = minmod_slope(U, U, U, 1)
-    U_left = U .- 0.5 .* slope
-    U_right = U .+ 0.5 .* slope
-    return clip_to_zero(U_left, B_left), clip_to_zero(U_right, B_right)
+function is_dry(U, b, ε)
+    return abs(height(U) - b) < ε
+end
+
+function is_interface_dry(U, b, ε)
+    return height(U) < b + ε
+end
+
+function reconstruct_cell(Ul, Uc, Ur, B_left, B_right, ε, compute_slope)
+    if is_dry(Uc, 0.5 * (B_left + B_right), ε)
+        return zero(Ul), zero(Ur)
+    end
+    if is_interface_dry(Uc, B_left, ε)
+        return zero(Ul), convert_to_depth(Uc, B_right, ε)
+    end
+    if is_interface_dry(Uc, B_right, ε)
+        return convert_to_depth(Uc, B_left, ε), zero(Ur)
+    end
+
+    slope = compute_slope(Ul, Uc, Ur)
+
+    U_left = Uc .- 0.5 .* slope
+    U_right = Uc .+ 0.5 .* slope
+
+    return convert_to_depth(U_left, B_left, ε), convert_to_depth(U_right, B_right, ε)
 end
 
 function SinFVM.reconstruct!(backend, ::BathymetryHandlingReconstruction, output_left, output_right, input_conserved, grid::SinFVM.Grid, eq::AllPracticalSWE, direction)
     @assert grid.ghostcells[1] > 1
 
-    for_each_inner_cell(backend, grid, direction; ghostcells=1) do ileft, imiddle, iright
+    compute_slope = (Ul, Uc, Ur) -> minmod_slope(Ul, Uc, Ur, 1.)
 
+    for_each_inner_cell(backend, grid, direction; ghostcells=1) do ileft, imiddle, iright
         B_left = B_face_left(eq.B, imiddle, direction)
         B_right = B_face_right(eq.B, imiddle, direction)
-        U_left, U_right = reconstruct_cell(input_conserved[imiddle], B_left, B_right)
-
+        U_left, U_right = reconstruct_cell(input_conserved[ileft:iright]..., B_left, B_right, eq.depth_cutoff, compute_slope)
         output_left[imiddle], output_right[imiddle] = U_left, U_right
     end
 
@@ -178,7 +204,7 @@ function SinFVM.evaluate_directional_source_term!(::DryFrontTerm, output, curren
     h_right = cs.right_buffer.h
     h_left  = cs.left_buffer.h
     for_each_inner_cell(cs.backend, cs.grid, dir) do ileft, imiddle, iright
-        B_right = B_face_right( B, imiddle, dir)
+        B_right = B_face_right(B, imiddle, dir)
         B_left  = B_face_left(B, imiddle, dir)
 
         output_momentum[imiddle] += compute_source_term(h_left[imiddle], h_right[imiddle], B_left, B_right, g, dx, cs.equation.depth_cutoff)

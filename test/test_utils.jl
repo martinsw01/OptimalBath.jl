@@ -27,28 +27,29 @@ function initial_state(problem::PrimalSWETestProblem)
 end
 
 
-function lake_at_rest(bathymetry, N, M)
+function lake_at_rest(bathymetry)
+    M = 20
+    N = length(bathymetry) - 1
+    t = range(0.0, stop=1.0, length=M)
+    x = range(0.0, stop=1.0, length=N+1)
+
     h = first(bathymetry) + 1
-    U = SVector{2, eltype(bathymetry)}(h, 0.0)
-    return fill(U, N, M)
+    U = State(h, 0.0)
+    return fill(U, N, M), t, x
 end
 
 function solve_primal(::PrimalSWETestProblem, bathymetry)
-    N = length(bathymetry) - 1
-    M = 20
-    U = lake_at_rest(bathymetry, N, M)
-    t = range(0.0, stop=1.0, length=M)
-    x = range(0.0, stop=1.0, length=N+1)
-    return States{Average, Elevation}(U), t, x
+    U, t, x = lake_at_rest(bathymetry)
+    Ul = States{Left, Depth}(U)
+    Ur = States{Right, Depth}(U)
+    return (Ul, Ur), t, x
 end
 
 function solve_primal(problem::PrimalSWETestProblem, bathymetry, callback)
-    U, t, x = solve_primal(problem, bathymetry)
+    U, t, x = lake_at_rest(bathymetry)
     Δt = step(t)
-
-    # callback.(eachcol(U[:,2:end]), t[2:end], Δt)
-    for n in 2:length(t)
-        callback(States{Average, Elevation}(U.U[:, n]), t[n], Δt)
+    for n in 2:lastindex(t)
+        callback(States{Average, Elevation}(U[:, n]), t[n], Δt)
     end
 end
 

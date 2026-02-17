@@ -1,4 +1,5 @@
 struct Energy <: Objective end
+struct KineticEnergy <: Objective end
 struct SquaredMomentum <: Objective end
 struct Mass <: Objective end
 struct NoObjective <: Objective end
@@ -15,12 +16,23 @@ function objective_density(::Energy, U)
     return 0.5 * (U[2]^2 / U[1] + 9.81 * U[1]^2)
 end
 
+function objective_density(::KineticEnergy, (h, hu))
+    u = desingularize(h, hu)
+    return 0.5 * hu * u
+end
+
+function objective_density_gradient(::KineticEnergy, (h, hu))
+    u = desingularize(h, hu)
+    SVector(-0.5 * u^2, u)
+end
+
 function objective_density(::SquaredMomentum, U)
     return U[2]^2
 end
 
 function objective_density(::Mass, U)
-    return U[1]
+    # return U[1]
+    return U[1]^2
 end
 
 function objective_density(::NoObjective, U)
@@ -29,7 +41,7 @@ end
 
 
 function objective_density_gradient(obj::Objective, U::States{S, Depth, T, N, A}, I...) where {S, T, N, A}
-    return objective_density_gradient.(obj, U.U[I...])
+    return objective_density_gradient.(obj, @view U.U[I...])
 end
 
 function objective_density_gradient(obj::Objective, U)
