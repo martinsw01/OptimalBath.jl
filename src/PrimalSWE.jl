@@ -1,4 +1,26 @@
+export SinFVMPrimalSWEProblem, LinearReconstruction, NoReconstruction, ForwardEuler, RK2
+
 using SinFVM, ElasticArrays
+
+struct LinearReconstruction <: Reconstruction
+    r::SinFVM.LinearReconstruction
+    LinearReconstruction() = new(SinFVM.LinearReconstruction())
+end
+
+struct NoReconstruction <: Reconstruction
+    r::SinFVM.NoReconstruction
+    NoReconstruction() = new(SinFVM.NoReconstruction())
+end
+
+struct ForwardEuler <: TimeStepper
+    t::SinFVM.ForwardEulerStepper
+    ForwardEuler() = new(SinFVM.ForwardEulerStepper())
+end
+
+struct RK2 <: TimeStepper
+    t::SinFVM.RungeKutta2
+    RK2() = new(SinFVM.RungeKutta2())
+end
 
 """
     SinFVMPrimalSWEProblem
@@ -20,8 +42,8 @@ struct SinFVMPrimalSWEProblem <: PrimalSWEProblem
                               make_backend=SinFVM.make_cpu_backend,
                               initial_bathymetry=zeros(N + 1),
                               grid=SinFVM.CartesianGrid(N; gc=2, boundary=SinFVM.WallBC(), extent = domain),
-                              reconstruction=BathymetryHandlingReconstruction(),
-                              timestepper=SinFVM.RungeKutta2()) where {FloatType, D, A}
+                              reconstruction::Reconstruction=LinearReconstruction(),
+                              timestepper::TimeStepper=RK2()) where {FloatType, D, A}
         @assert length(initial_bathymetry) == N + 1 "Bathymetry must have length N+1=$(N + 1) ≠ $(length(initial_bathymetry))"
         return new(make_backend,
                    initial_bathymetry,
@@ -42,8 +64,8 @@ function _create_simulator(problem, β)
     bathymetry = SinFVM.BottomTopography1D(b, backend, problem._grid)
     equation = SinFVM.ShallowWaterEquations1D(bathymetry)
     numericalflux = SinFVM.CentralUpwind(equation)
-    conserved_system = SinFVM.ConservedSystem(backend, problem._reconstruction, numericalflux, equation, problem._grid, [DryFrontTerm()])
-    simulator = SinFVM.Simulator(backend, conserved_system, problem._timestepper, problem._grid, cfl=0.2)
+    conserved_system = SinFVM.ConservedSystem(backend, problem._reconstruction.r, numericalflux, equation, problem._grid, [DryFrontTerm()])
+    simulator = SinFVM.Simulator(backend, conserved_system, problem._timestepper.t, problem._grid)
 
     U_adjusted = adjust_to_bathymetry_changes(problem.u0, β)
     SinFVM.set_current_state!(simulator, U_adjusted.U)
@@ -85,6 +107,14 @@ function recording_reconstructions_callback(simulator, t0)
     return record_state, (Ul, Ur), t
 end
 
+function recording_callback(problem::SinFVMPrimalSWEProblem, ::NoReconstruction, simulator, t0)
+    return recording_callback(problem, simulator, t0)
+end
+
+function recording_callback(::SinFVMPrimalSWEProblem, ::LinearReconstruction, simulator, t0)
+    return recording_reconstructions_callback(simulator, t0)
+end
+
 function create_callback(f, ::SinFVMPrimalSWEProblem)
     function callback(t_n, simulator)
         U = SinFVM.current_interior_state(simulator)
@@ -100,7 +130,7 @@ function solve_primal(problem::SinFVMPrimalSWEProblem, β)
 
     simulator = _create_simulator(problem, β)
 
-    callback, U, t = recording_reconstructions_callback(simulator, t0)
+    callback, U, t = recording_callback(problem, problem._reconstruction, simulator, t0)
 
     SinFVM.simulate_to_time(simulator, problem.T; callback=callback)
 
@@ -122,14 +152,14 @@ function initial_state(problem::SinFVMPrimalSWEProblem)
     return problem.u0
 end
 
-using SinFVM: Reconstruction, for_each_cell, B_cell, B_face_left, B_face_right, minmod_slope, AllPracticalSWE, for_each_inner_cell
+using SinFVM: for_each_cell, B_cell, B_face_left, B_face_right, minmod_slope, AllPracticalSWE, for_each_inner_cell
 import SinFVM: reconstruct!
 
 """
     BathymetryHandlingReconstruction()
 A linear reconstruction similar to SinFVM.LinearReconstruction, but caps heights and momentum to zero instead of adjusting the slope.
 """
-struct BathymetryHandlingReconstruction <: Reconstruction end
+struct BathymetryHandlingReconstruction <: SinFVM.Reconstruction end
 
 function convert_to_depth(U, b, ε)
     h, p = U

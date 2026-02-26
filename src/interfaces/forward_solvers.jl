@@ -1,7 +1,11 @@
-export PrimalSWEProblem, solve_primal
+export PrimalSWEProblem, solve_primal, Reconstruction, TimeStepper
 
 
 abstract type PrimalSWEProblem end
+
+abstract type Reconstruction end
+
+abstract type TimeStepper end
 
 """
     solve_primal(primal_swe_problem::PrimalSWEProblem, bathymetry, callbacks=[])

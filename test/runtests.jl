@@ -34,6 +34,10 @@ using Test
     @testset "Reconstruction tests" begin
         include("reconstruction_test.jl")
     end
+
+    @testset "Discrete adjoint tests" begin
+        include("discrete_adjoint_test.jl")
+    end
 end
 
 nothing
