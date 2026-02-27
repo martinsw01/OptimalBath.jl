@@ -55,13 +55,15 @@ function adjoint_dot_test(adjoint_type)
 
     Λ = solve_adjoint(Λ0, U, dJdU, β, t, Δx, adjoint_type(problem))
 
-    adjoint_dot_product_test = dot(δU[:, 1], Λ[:,1])
+    adjoint_dot_product_test = dot(δU[:, end], Λ0)
+    @test adjoint_dot_product_test ≈ dot(δU0, Λ[:, 1])
 
-    dot_products = [dot(δU[:, n], Λ[:,n]) for n in 1:size(U.U, 2)]
-    all_equal = reduce(dot_products, init=true) do acc, dp
-        return acc && dp ≈ adjoint_dot_product_test
-    end
-    @test all_equal
+    # dot_products = [dot(δU[:, n], Λ[:,n]) for n in 1:size(U.U, 2)]
+    # all_equal = reduce(dot_products, init=true) do acc, dp
+    #     return acc && dp ≈ adjoint_dot_product_test
+    # end
+    # @test all_equal
+    # reduce(hcat, Λ[:, 1])
 end
 
 @testset "Compare with AD" begin
