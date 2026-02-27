@@ -73,12 +73,21 @@ function eigval_gradient(U::State)
     return State(∂a∂h, ∂a∂p)
 end
 
-function add_timestep_source!(Λ_prev, Λ_next, U_next, U_prev, terminal_timestep_source, Δt, Δx, CFL)
+function compute_timestep_correction(Λ_next, U_prev, U_next, Δt)
+    return Λ_next' * (U_next - U_prev) / Δt
+end
+
+function compute_timestep_gradient(CFL, Δx, Ui, wave_speed)
+    ∂a∂U = eigval_gradient(Ui)
+    τ = - CFL * Δx / wave_speed^2 * ∂a∂U
+    return τ
+end
+
+function add_timestep_source!(Λ_prev, Λ_next, U_next, U_prev, μ_global, Δt, Δx, CFL)
     wave_speed, i = determine_time_step_index(U_prev)
-    ∂a∂U = eigval_gradient(U_prev[i])
-    t_source = time_step_source(Λ_next, U_next, U_prev, wave_speed, CFL, Δx, Δt, ∂a∂U)
-    τ = CFL * Δx / wave_speed^2
-    Λ_prev[i] += t_source + τ * terminal_timestep_source * ∂a∂U
+    τ = compute_timestep_gradient(CFL, Δx, U_prev[i], wave_speed)
+    μ_local = compute_timestep_correction(Λ_next, U_prev, U_next, Δt)
+    Λ_prev[i] += (μ_local - μ_global) * τ
 end
 
 function compute_semi_discrete_derivative(Λl, Λc, Λr, Ul, Uc, Ur, dJdU, bl, br, Δt, Δx, ::DiscreteAdjoint)
@@ -127,16 +136,12 @@ function compute_next_Λ_right_boundary(Λl, Λc, Ul, Uc, dJdU, bl, br, Δt, Δx
     return compute_right_boundary_semi_discrete_derivative(Λl, Λc, Ul, Uc, Ur, dJdU, bl, br, Δt, Δx, da)
 end
 
-function compute_terminal_timestep_source(Λ_last, U_last, U_next_to_last, Δt)
-    return Λ_last' * (U_last - U_next_to_last) / Δt
-end
-
 
 @views function solve_adjoint(Λ0, U::AverageDepthStates, dJdU, b, t, Δx, da::DiscreteAdjoint)
     U = U.U
     Λ = similar(U)
 
-    terminal_timestep_source = compute_terminal_timestep_source(Λ0, U[:, end], U[:, end-1], t[end] - t[end-1])
+    μ_global = compute_timestep_correction(Λ0, U[:, end-1], U[:, end], t[end] - t[end-1])
 
     N, M = size(U)
     Λ[:, end] .= Λ0
@@ -160,7 +165,7 @@ end
                                                   b[N:N+1]...,
                                                   Δt, Δx, da)
         if n < M
-            add_timestep_source!(Λ[:, n-1], Λ[:, n], U[:, n], U[:, n-1], terminal_timestep_source, Δt, Δx, 0.25)
+            add_timestep_source!(Λ[:, n-1], Λ[:, n], U[:, n], U[:, n-1], μ_global, Δt, Δx, 0.25)
         end
     end
     return Λ
