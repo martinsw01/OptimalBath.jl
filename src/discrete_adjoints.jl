@@ -44,6 +44,40 @@ function ddisplay(A)
     println("{{$(A[1, 1]), $(A[1, 2])}, {$(A[2, 1]), $(A[2, 2])}}")
 end
 
+
+function time_step_source(Λ, U_next, U_prev, wave_speed, CFL, Δx, Δt, ∂a∂U)
+    τ = - CFL * Δx / wave_speed^2 * ∂a∂U
+    τ * sum(zip(Λ, U_next, U_prev)) do (Λ_j, U_next_j, U_prev_j)
+        ∂U∂t = (U_next_j - U_prev_j) / Δt
+        return Λ_j' * ∂U∂t
+    end
+end
+
+function compute_max_abs_eigval(U::State)
+    h, p = U
+    u = p / h
+    c = sqrt(9.81*h)
+    return abs(u) + abs(c)
+end
+
+function determine_time_step_index(U)
+    findmax(compute_max_abs_eigval, U)
+end
+
+function eigval_gradient(U::State)
+    h, p = U
+    p_sgn = sign(p)
+    ∂a∂h = -p_sgn * p/h^2 + 0.5 * sqrt(9.81/h)
+    ∂a∂p = p_sgn / h
+    return State(∂a∂h, ∂a∂p)
+end
+
+function add_timestep_source!(Λ_prev, Λ_next, U_next, U_prev, Δt, Δx, CFL)
+    wave_speed, i = determine_time_step_index(U_prev)
+    t_source = time_step_source(Λ_next, U_next, U_prev, wave_speed, CFL, Δx, Δt, eigval_gradient(U_prev[i]))
+    Λ_prev[i] += t_source
+end
+
 function compute_semi_discrete_derivative(Λl, Λc, Λr, Ul, Uc, Ur, dJdU, bl, br, Δt, Δx, ::DiscreteAdjoint)
     dFldU = flux_left_grad_center(Ul, Uc)
     dFrdU = flux_right_grad_center(Uc, Ur)
@@ -52,7 +86,6 @@ function compute_semi_discrete_derivative(Λl, Λc, Λr, Ul, Uc, Ur, dJdU, bl, b
     center = I2 .- (dFrdU - dFldU) / Δx * Δt
     right = dFrdU / Δx * Δt
     return left' * Λl + center' * Λc + right' * Λr + dJdU
-    # return (dFrdU' * (Λr - Λc) - dFldU' * (Λc - Λl)) / Δx + dJdU
 end
 
 function compoute_left_boundary_semi_discrete_derivative(Λ1, Λ2, Ul, Uc, Ur, dJdU, bl, br, Δt, Δx, ::DiscreteAdjoint)
@@ -63,7 +96,6 @@ function compoute_left_boundary_semi_discrete_derivative(Λ1, Λ2, Ul, Uc, Ur, d
     center = I2 .- (dFrdU - dFldU_ghost - dFldU) / Δx * Δt
     right = dFrdU / Δx * Δt
     return center' * Λ1 + right' * Λ2 + dJdU
-    # return (dFrdU' * (Λ2 - Λ1) - (dFldU + dFldU_ghost * A)' * Λ1) ./ Δx + dJdU
 end
 
 function compute_right_boundary_semi_discrete_derivative(Λl, Λc, Ul, Uc, Ur, dJdU, bl, br, Δt, Δx, ::DiscreteAdjoint)
@@ -80,23 +112,20 @@ end
 function compute_next_Λ_left_boundary(Λ1, Λ2, U1, U2, dJdU, bl, br, Δt, Δx, da::DiscreteAdjoint)
     U0 = compute_ghost_cell(U1, nothing)
     return compoute_left_boundary_semi_discrete_derivative(Λ1, Λ2, U0, U1, U2, dJdU, bl, br, Δt, Δx, da)
-    # return Λ1 + Δt * compoute_left_boundary_semi_discrete_derivative(Λ1, Λ2, U0, U1, U2, dJdU, bl, br, Δt, Δx, da)
 end
 
 
 function compute_next_Λ(Λl, Λc, Λr, Ul, Uc, Ur, dJdU, bl, br, Δt, Δx, da::DiscreteAdjoint)
     return compute_semi_discrete_derivative(Λl, Λc, Λr, Ul, Uc, Ur, dJdU, bl, br, Δt, Δx, da)
-    # return Λc + Δt * compute_semi_discrete_derivative(Λl, Λc, Λr, Ul, Uc, Ur, dJdU, bl, br, Δt, Δx, da)
 end
 
 function compute_next_Λ_right_boundary(Λl, Λc, Ul, Uc, dJdU, bl, br, Δt, Δx, da::DiscreteAdjoint)
     Ur = compute_ghost_cell(Uc, nothing)
     return compute_right_boundary_semi_discrete_derivative(Λl, Λc, Ul, Uc, Ur, dJdU, bl, br, Δt, Δx, da)
-    # return Λc + Δt * compute_right_boundary_semi_discrete_derivative(Λl, Λc, Uc, Ul, Ur, dJdU, bl, br, Δt, Δx, da)
 end
 
 
-function solve_adjoint(Λ0, U::AverageDepthStates, dJdU, b, t, Δx, da::DiscreteAdjoint)
+@views function solve_adjoint(Λ0, U::AverageDepthStates, dJdU, b, t, Δx, da::DiscreteAdjoint)
     U = U.U
     Λ = similar(U)
 
@@ -121,6 +150,7 @@ function solve_adjoint(Λ0, U::AverageDepthStates, dJdU, b, t, Δx, da::Discrete
                                                   dJdU[N, n],
                                                   b[N:N+1]...,
                                                   Δt, Δx, da)
+        add_timestep_source!(Λ[:, n-1], Λ[:, n], U[:, n], U[:, n-1], Δt, Δx, 0.25)
     end
     return Λ
 end
@@ -162,7 +192,7 @@ function solve_adjoint(Λ0, U::AverageDepthStates, dJdU, b, t, Δx, da::TestDisc
     J_flat = ForwardDiff.jacobian(flatten(U0.U)) do U
         β = zeros(eltype(eltype(U)), N+1)
         U = States{Average, Elevation}(unflatten(U))
-        problem = SinFVMPrimalSWEProblem(N, U, last(t))
+        problem = SinFVMPrimalSWEProblem(N, U, last(t), reconstruction=NoReconstruction(), timestepper=ForwardEuler())
         U, t, x = solve_primal(problem, β)
         return flatten(U.U[:, end])
     end

@@ -1,5 +1,3 @@
-using Test
-
 function flatten(U::AbstractMatrix)
     return reduce(vcat, vec(U))
 end
@@ -25,7 +23,6 @@ function tangent_linear_model(N, U0, δU0)
         β = zeros(eltype(eltype(U)), N+1)
         U = States{Average, Elevation}(unflatten(U))
         problem = SinFVMPrimalSWEProblem(N, U, 0.1, reconstruction=NoReconstruction(), timestepper=ForwardEuler())
-        # (Ul, Ur), t, x = solve_primal(problem, β)
         U, t, x = solve_primal(problem, β)
         return U, t, x, problem
     end
