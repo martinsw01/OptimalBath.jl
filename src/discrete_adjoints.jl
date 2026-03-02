@@ -83,89 +83,103 @@ function compute_timestep_gradient(CFL, Δx, Ui, wave_speed)
     return τ
 end
 
-function add_timestep_source!(Λ_prev, Λ_next, U_next, U_prev, μ_global, Δt, Δx, CFL)
+function add_timestep_source!(Λ_prev, Λ_next, U_next, U_prev, μ_final, J_final, Δt, Δx, CFL, objectives, local_correction=1)
     wave_speed, i = determine_time_step_index(U_prev)
     τ = compute_timestep_gradient(CFL, Δx, U_prev[i], wave_speed)
-    μ_local = compute_timestep_correction(Λ_next, U_prev, U_next, Δt)
-    Λ_prev[i] += (μ_local - μ_global) * τ
+    μ_step = compute_timestep_correction(Λ_next, U_prev, U_next, Δt)
+    J_step = compute_objective_step(U_prev, Δx, Δt, objectives)
+    Δμ = local_correction * (μ_step - μ_final)
+    ΔJ = J_step - J_final
+    Λ_prev[i] += (Δμ + ΔJ) * τ
 end
 
-function compute_semi_discrete_derivative(Λl, Λc, Λr, Ul, Uc, Ur, dJdU, bl, br, Δt, Δx, ::DiscreteAdjoint)
-    dFldU = flux_left_grad_center(Ul, Uc)
-    dFrdU = flux_right_grad_center(Uc, Ur)
-
-    left = -dFldU / Δx * Δt
-    center = I2 .- (dFrdU - dFldU) / Δx * Δt
-    right = dFrdU / Δx * Δt
-    return left' * Λl + center' * Λc + right' * Λr + dJdU
+# Only used for the adjoint dot product test
+function add_objective_timestep_source!(Λ_prev, U_prev, J_final, Δt, Δx, CFL, objectives)
+    wave_speed, i = determine_time_step_index(U_prev)
+    τ = compute_timestep_gradient(CFL, Δx, U_prev[i], wave_speed)
+    J_step = compute_objective_step(U_prev, Δx, Δt, objectives)
+    ΔJ = J_step - J_final
+    Λ_prev[i] += ΔJ * τ
 end
 
-function compoute_left_boundary_semi_discrete_derivative(Λ1, Λ2, Ul, Uc, Ur, dJdU, bl, br, Δt, Δx, ::DiscreteAdjoint)
+function set_flux_jvp_left_boundary!(Λ1, Λ2, Uc, Ur, Δt, Δx, da::DiscreteAdjoint)
+    Ul = compute_ghost_cell(Uc, nothing)
+    
     A = @SMatrix [1 0; 0 -1]
     dFldU_ghost = flux_right_grad_center(Ul, Uc) * A
     dFldU = flux_left_grad_center(Ul, Uc)
     dFrdU = flux_right_grad_center(Uc, Ur)
     center = I2 .- (dFrdU - dFldU_ghost - dFldU) / Δx * Δt
     right = dFrdU / Δx * Δt
-    return center' * Λ1 + right' * Λ2 + dJdU
+    return center' * Λ1 + right' * Λ2
 end
 
-function compute_right_boundary_semi_discrete_derivative(Λl, Λc, Ul, Uc, Ur, dJdU, bl, br, Δt, Δx, ::DiscreteAdjoint)
+
+function set_flux_jvp_interior!(Λl, Λc, Λr, Ul, Uc, Ur, Δt, Δx, da::DiscreteAdjoint)
+    dFldU = flux_left_grad_center(Ul, Uc)
+    dFrdU = flux_right_grad_center(Uc, Ur)
+
+    left = -dFldU / Δx * Δt
+    center = I2 .- (dFrdU - dFldU) / Δx * Δt
+    right = dFrdU / Δx * Δt
+    return left' * Λl + center' * Λc + right' * Λr
+end
+
+function set_flux_jvp_right_boundary!(Λl, Λc, Ul, Uc, Δt, Δx, da::DiscreteAdjoint)
+    Ur = compute_ghost_cell(Uc, nothing)
+    
     dFldU = flux_left_grad_center(Ul, Uc)
     dFrdU = flux_right_grad_center(Uc, Ur)
     A = @SMatrix [1 0; 0 -1]
     dFrdU_ghost = flux_left_grad_center(Uc, Ur) * A
     left = -dFldU / Δx * Δt
     center = I2 .+ (dFldU - dFrdU_ghost - dFrdU) / Δx * Δt
-    return left' * Λl + center' * Λc + dJdU
+    return left' * Λl + center' * Λc
+end
+
+function set_flux_jvp!(Λ, U, N, n, Δx, Δt, da::DiscreteAdjoint)
+    Λ[1, n-1] = set_flux_jvp_left_boundary!(Λ[1:2, n]...,
+                                             U[1:2, n-1]...,
+                                             Δt, Δx, da)
+    for i in 2:N-1
+        Λ[i, n-1] = set_flux_jvp_interior!(Λ[i-1:i+1, n]...,
+                                           U[i-1:i+1, n-1]...,
+                                           Δt, Δx, da)
+    end
+    Λ[N, n-1] = set_flux_jvp_right_boundary!(Λ[N-1:N, n]...,
+                                             U[N-1:N, n-1]...,
+                                             Δt, Δx, da)
+end
+
+function add_objective_source!(Λ, objectives, U, Δt)
+    indices = objectives.objective_indices
+    objective = objectives.interior_objective
+    Λ[indices] .+= objective_density_gradient.(objective, @view U[indices]) * Δt
+end
+
+function compute_objective_step(U, Δx, Δt, objectives::Objectives)
+    indices = objectives.objective_indices
+    objective = objectives.interior_objective
+    return sum(objective_density.(objective, @view U[indices])) * Δx * Δt
 end
 
 
-function compute_next_Λ_left_boundary(Λ1, Λ2, U1, U2, dJdU, bl, br, Δt, Δx, da::DiscreteAdjoint)
-    U0 = compute_ghost_cell(U1, nothing)
-    return compoute_left_boundary_semi_discrete_derivative(Λ1, Λ2, U0, U1, U2, dJdU, bl, br, Δt, Δx, da)
-end
-
-
-function compute_next_Λ(Λl, Λc, Λr, Ul, Uc, Ur, dJdU, bl, br, Δt, Δx, da::DiscreteAdjoint)
-    return compute_semi_discrete_derivative(Λl, Λc, Λr, Ul, Uc, Ur, dJdU, bl, br, Δt, Δx, da)
-end
-
-function compute_next_Λ_right_boundary(Λl, Λc, Ul, Uc, dJdU, bl, br, Δt, Δx, da::DiscreteAdjoint)
-    Ur = compute_ghost_cell(Uc, nothing)
-    return compute_right_boundary_semi_discrete_derivative(Λl, Λc, Ul, Uc, Ur, dJdU, bl, br, Δt, Δx, da)
-end
-
-
-@views function solve_adjoint(Λ0, U::AverageDepthStates, dJdU, b, t, Δx, da::DiscreteAdjoint)
+@views function solve_adjoint(Λ0, U::AverageDepthStates, objectives::Objectives, b, t, Δx, da::DiscreteAdjoint)
     U = U.U
     Λ = similar(U)
 
-    μ_global = compute_timestep_correction(Λ0, U[:, end-1], U[:, end], t[end] - t[end-1])
+    Δt = t[end] - t[end-1]
+    μ_final = compute_timestep_correction(Λ0, U[:, end-1], U[:, end], Δt)
+    J_final = compute_objective_step(U[:, end-1], Δx, Δt, objectives)
 
     N, M = size(U)
     Λ[:, end] .= Λ0
     for n in M:-1:2
         Δt = t[n] - t[n-1]
-        Λ[1, n-1] = compute_next_Λ_left_boundary(Λ[1:2, n]...,
-                                                 U[1:2, n-1]...,
-                                                 dJdU[1, n],
-                                                 b[1:2]...,
-                                                 Δt, Δx, da)
-        for i in 2:N-1
-            Λ[i, n-1] = compute_next_Λ(Λ[i-1:i+1, n]...,
-                                       U[i-1:i+1, n-1]...,
-                                       dJdU[i, n],
-                                       b[i:i+1]...,
-                                       Δt, Δx, da)
-        end
-        Λ[N, n-1] = compute_next_Λ_right_boundary(Λ[N-1:N, n]...,
-                                                  U[N-1:N, n-1]...,
-                                                  dJdU[N, n],
-                                                  b[N:N+1]...,
-                                                  Δt, Δx, da)
+        set_flux_jvp!(Λ, U, N, n, Δx, Δt, da)
+        add_objective_source!(Λ[:, n-1], objectives, U[:, n-1], Δt)
         if n < M
-            add_timestep_source!(Λ[:, n-1], Λ[:, n], U[:, n], U[:, n-1], μ_global, Δt, Δx, 0.25)
+            add_timestep_source!(Λ[:, n-1], Λ[:, n], U[:, n], U[:, n-1], μ_final, J_final, Δt, Δx, 0.25, objectives)
         end
     end
     return Λ
