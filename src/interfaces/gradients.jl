@@ -30,6 +30,7 @@ function objective_density end
 function objective_density_gradient end
 
 """
-    compute_objective(U::States{S, Depth, T, N, A}, t, x, β, objectives::Objectives) where {S, T, N, A}
+    compute_objective(U::States{S, Depth, T, N, A}, t, x, β, objectives::Objectives, timestepper::Timestepper) where {S, T, N, A}
+    compute_objective(U::States{S, Depth, T, N, A}, t, x, β, objectives::Objectives, timestepper::Type{<:Timestepper}) where {S, T, N, A}
 """
 function compute_objective end

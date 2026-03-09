@@ -15,7 +15,7 @@ end
     β = ones(N+1)
     U = States{Average, Depth}(fill(State(h, hu), N, M))
     objectives = OptimalBath.Objectives(interior_objective=OptimalBath.Mass())
-    objective = OptimalBath.compute_objective(U, t, x, β, objectives)
+    objective = OptimalBath.compute_objective(U, t, x, β, objectives, ForwardEuler)
     expected_objective = h * L * T
     @test objective ≈ expected_objective atol=1e-6
 end
@@ -33,7 +33,7 @@ end
     objective_indices = sample(1:N, number_of_objective_cells; replace=false)
 
     objectives = OptimalBath.Objectives(interior_objective=OptimalBath.Mass(), objective_indices=objective_indices)
-    objective = OptimalBath.compute_objective(U, t, x, β, objectives)
+    objective = OptimalBath.compute_objective(U, t, x, β, objectives, ForwardEuler)
     expected_objective = h * L * T * (number_of_objective_cells / N)
     @test objective ≈ expected_objective atol=1e-6
 end
@@ -48,7 +48,7 @@ end
     β = ones(N+1)
     U = States{Average, Depth}([State(xj, rand()) for xj in 0:L, _ in 1:M])
     objectives = OptimalBath.Objectives(interior_objective=OptimalBath.Mass())
-    objective = OptimalBath.compute_objective(U, t, x, β, objectives)
+    objective = OptimalBath.compute_objective(U, t, x, β, objectives, ForwardEuler)
     expected_objective = 0.5 * L^2 * T
     @test objective ≈ expected_objective atol=1e-6
 end
@@ -62,9 +62,9 @@ end
     β = ones(N+1)
     U = States{Average, Depth}([State(h0 * tn, rand()) for _ in 1:N, tn in t])
     objectives = OptimalBath.Objectives(interior_objective=OptimalBath.Mass())
-    objective = OptimalBath.compute_objective(U, t, x, β, objectives)
+    objective = OptimalBath.compute_objective(U, t, x, β, objectives, RK2)
     expected_objective = 0.5 * h0 * L * T^2
-    @test objective ≈ expected_objective atol=1e-6 skip=true
+    @test objective ≈ expected_objective atol=1e-6
 end
 
 
@@ -79,9 +79,9 @@ end
     Ul = States{Left, Depth}(Ul)
     Ur = States{Right, Depth}(Ur)
     objectives = OptimalBath.Objectives(interior_objective=OptimalBath.Mass())
-    objective = OptimalBath.compute_objective(Ul, Ur, t, x, β, objectives)
+    objective = OptimalBath.compute_objective(Ul, Ur, t, x, β, objectives, RK2)
     expected_objective = 0.25 * h0 * L^2 * T^2
-    @test objective ≈ expected_objective atol=1e-6 skip=true
+    @test objective ≈ expected_objective atol=1e-6
 end
 
 
@@ -100,8 +100,8 @@ end
                                         objective_indices=3:N,
                                         design_indices=1:N-1,
                                         regularization=β -> sum(β.^2))
-    objective_average = OptimalBath.compute_objective(U, t, x, β, objectives)
-    objective_reconstructed = OptimalBath.compute_objective(Ul, Ur, t, x, β, objectives)
+    objective_average = OptimalBath.compute_objective(U, t, x, β, objectives, ForwardEuler)
+    objective_reconstructed = OptimalBath.compute_objective(Ul, Ur, t, x, β, objectives, ForwardEuler)
     @test objective_average ≈ objective_reconstructed
 end
 
@@ -117,7 +117,7 @@ end
 
 
     objectives = OptimalBath.Objectives(terminal_objective=OptimalBath.Mass())
-    objective = OptimalBath.compute_objective(U, t, x, β, objectives)
+    objective = OptimalBath.compute_objective(U, t, x, β, objectives, ForwardEuler)
     expected_objective = 0.5 * h * L
     @test objective ≈ expected_objective atol=1e-6
 end

@@ -52,8 +52,19 @@ function objective_density_gradient(obj::Objective, U)
     end
 end
 
+function objective_increment(objectives, U, n, Δt, Δx, ::Type{ForwardEuler})
+    interior_objective = objectives.interior_objective
+    objective_indices = objectives.objective_indices
+    return sum(objective_density(interior_objective, U, objective_indices, n)) * Δt * Δx
+end
 
-function _compute_objective(U::States, t, x, β, objectives)
+function objective_increment(objectives, U, n, Δt, Δx, ::Type{RK2})
+    interior_objective = objectives.interior_objective
+    objective_indices = objectives.objective_indices
+    return 0.5 * sum(objective_density(interior_objective, U, objective_indices, n:n+1)) * Δt * Δx
+end
+
+function _compute_objective(U::States, t, x, β, objectives, timestepper)
     N, M = size(U.U)
     @assert (N, M) == (length(x)-1, length(t))
     Δx = x[2] - x[1]
@@ -62,10 +73,7 @@ function _compute_objective(U::States, t, x, β, objectives)
     for n in 1:lastindex(t)-1
         Δt = t[n+1] - t[n]
 
-        interior_integral += sum(objective_density(objectives.interior_objective,
-                                                         U,
-                                                         objectives.objective_indices,
-                                                         n)) * Δt * Δx
+        interior_integral += objective_increment(objectives, U, n, Δt, Δx, timestepper)
     end
 
     terminal_integral = sum(objective_density(objectives.terminal_objective,
@@ -76,12 +84,19 @@ function _compute_objective(U::States, t, x, β, objectives)
     return interior_integral + terminal_integral
 end
 
-
-function compute_objective(U::States{S, Depth, T, D, A}, t, x, β, objectives::Objectives) where {S, T, D, A}
-    return _compute_objective(U, t, x, β, objectives)
+function compute_objective(U::States{S, Depth, T, D, A}, t, x, β, objectives::Objectives, timestepper::Type{<:TimeStepper}) where {S, T, D, A}
+    return _compute_objective(U, t, x, β, objectives, timestepper)
 end
 
-function compute_objective(Ul::States{Left, Depth, T, D, A}, Ur::States{Right, Depth, T, D, A}, t, x, β, objectives::Objectives) where {T, D, A}
-    return 0.5 * (_compute_objective(Ul, t, x, β, objectives) +
-                  _compute_objective(Ur, t, x, β, objectives))
+function compute_objective(U::States{S, Depth, T, D, A}, t, x, β, objectives::Objectives, timestepper::TimeStepper) where {S, T, D, A}
+    return compute_objective(U, t, x, β, objectives, typeof(timestepper))
+end
+
+function compute_objective(Ul::States{Left, Depth, T, D, A}, Ur::States{Right, Depth, T, D, A}, t, x, β, objectives::Objectives, timestepper::Type{<:TimeStepper}) where {T, D, A}
+    return 0.5 * (_compute_objective(Ul, t, x, β, objectives, timestepper) +
+                  _compute_objective(Ur, t, x, β, objectives, timestepper))
+end
+
+function compute_objective(Ul::States{Left, Depth, T, D, A}, Ur::States{Right, Depth, T, D, A}, t, x, β, objectives::Objectives, timestepper::TimeStepper) where {T, D, A}
+    return compute_objective(Ul, Ur, t, x, β, objectives, typeof(timestepper))
 end

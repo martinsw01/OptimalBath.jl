@@ -41,17 +41,17 @@ function update_and_get_bathymetry!(ad::TestADGradient, swe_problem::PrimalSWEPr
     return bathymetry
 end
 
-struct SWETestObjectiveProblem <: PrimalSWEProblem
+struct SWETestObjectiveProblem{TimeStepperType} <: PrimalSWEProblem{NoReconstruction, TimeStepperType}
     initial_bathymetry
     U
     t
     x
-    function SWETestObjectiveProblem(N, M)
+    function SWETestObjectiveProblem(N, M, timestepper::TimeStepper=ForwardEuler())
         initial_bathymetry = rand(N + 1) .- 0.5
         U = rand(State{Float64}, N, M)
         t = [0.0; cumsum(rand(M - 1))] ./ M
         x = range(0.0, stop=1.0, length=N+1)
-        return new(initial_bathymetry, U, t, x)
+        return new{typeof(timestepper)}(initial_bathymetry, U, t, x)
     end
 end
 
@@ -79,9 +79,9 @@ function solve_primal(problem::SWETestObjectiveProblem, bathymetry)
     return States{Average, Elevation}(copy(problem.U)), problem.t, problem.x
 end
 
-@testset "Test ADGradient objective computation" begin
+function compare_objectives(timestepper::TimeStepper)
     N, M = 10, 20
-    test_problem = SWETestObjectiveProblem(N, M)
+    test_problem = SWETestObjectiveProblem(N, M, timestepper)
     
     β = rand(4) .- 0.5
     design_indices=[1, 2, 5, 8]
@@ -100,7 +100,12 @@ end
     gradient_type = TestADGradient()
     objective, _ = OptimalBath.compute_objective_and_gradient(β, test_problem, objectives, gradient_type)
 
-    expected_objective = compute_objective(U, t, x, β, objectives)
+    expected_objective = compute_objective(U, t, x, β, objectives, timestepper)
 
-    @test objective ≈ expected_objective skip=true
+    @test objective ≈ expected_objective
+end
+
+@testset "Test ADGradient objective computation" begin
+    compare_objectives(ForwardEuler())
+    compare_objectives(RK2())
 end

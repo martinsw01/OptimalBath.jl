@@ -2,24 +2,20 @@ export SinFVMPrimalSWEProblem, LinearReconstruction, NoReconstruction, ForwardEu
 
 using SinFVM, ElasticArrays
 
-struct LinearReconstruction <: Reconstruction
-    r::SinFVM.LinearReconstruction
-    LinearReconstruction() = new(SinFVM.LinearReconstruction())
+function get(::LinearReconstruction)
+    return SinFVM.LinearReconstruction()
 end
 
-struct NoReconstruction <: Reconstruction
-    r::SinFVM.NoReconstruction
-    NoReconstruction() = new(SinFVM.NoReconstruction())
+function get(::NoReconstruction)
+    return SinFVM.NoReconstruction()
 end
 
-struct ForwardEuler <: TimeStepper
-    t::SinFVM.ForwardEulerStepper
-    ForwardEuler() = new(SinFVM.ForwardEulerStepper())
+function get(::ForwardEuler)
+    return SinFVM.ForwardEulerStepper()
 end
 
-struct RK2 <: TimeStepper
-    t::SinFVM.RungeKutta2
-    RK2() = new(SinFVM.RungeKutta2())
+function get(::RK2)
+    return SinFVM.RungeKutta2()
 end
 
 """
@@ -27,12 +23,12 @@ end
 
 Wrapper around SinFVM. Contains problem definition and solver parameters.
 """
-struct SinFVMPrimalSWEProblem <: PrimalSWEProblem
+struct SinFVMPrimalSWEProblem{ReconstructionType, TimeStepperType} <: PrimalSWEProblem{ReconstructionType, TimeStepperType}
     _make_backend
     initial_bathymetry
     _grid
-    _reconstruction
-    _timestepper
+    _reconstruction::ReconstructionType
+    _timestepper::TimeStepperType
     u0
     T
     function SinFVMPrimalSWEProblem(N,
@@ -41,11 +37,11 @@ struct SinFVMPrimalSWEProblem <: PrimalSWEProblem
                               domain = [0.0 1.0],
                               make_backend=SinFVM.make_cpu_backend,
                               initial_bathymetry=zeros(N + 1),
-                              grid=SinFVM.CartesianGrid(N; gc=1, boundary=SinFVM.WallBC(), extent = domain),
                               reconstruction::Reconstruction=LinearReconstruction(),
                               timestepper::TimeStepper=RK2()) where {FloatType, D, A}
         @assert length(initial_bathymetry) == N + 1 "Bathymetry must have length N+1=$(N + 1) ≠ $(length(initial_bathymetry))"
-        return new(make_backend,
+        grid = _create_grid(N, domain, reconstruction)
+        return new{typeof(reconstruction), typeof(timestepper)}(make_backend,
                    initial_bathymetry,
                    grid,
                    reconstruction,
@@ -55,18 +51,43 @@ struct SinFVMPrimalSWEProblem <: PrimalSWEProblem
     end       
 end
 
+function _create_grid(N, domain, ::LinearReconstruction)
+    return _create_grid(N, domain, 2)
+end
+
+function _create_grid(N, domain, ::NoReconstruction)
+    return _create_grid(N, domain, 1)
+end
+
+function _create_grid(N, domain, gc)
+    return SinFVM.CartesianGrid(N; gc=gc, boundary=SinFVM.WallBC(), extent = domain)
+end
+
+function make_bathymetry(initial_bathymetry, β, gc)
+    b = vcat(reverse(initial_bathymetry[2:1+gc] .+ β[2:1+gc]),
+                 initial_bathymetry .+ β,
+                 reverse(initial_bathymetry[end-gc:end-1] .+ β[end-gc:end-1]))
+    return b
+end
+
+function make_bathymetry(initial_bathymetry, β, ::NoReconstruction)
+    return make_bathymetry(initial_bathymetry, β, 1)
+end
+
+function make_bathymetry(initial_bathymetry, β, ::LinearReconstruction)
+    return make_bathymetry(initial_bathymetry, β, 2)
+end
+
 function _create_simulator(problem, β)
     FloatType = eltype(β)
     backend = problem._make_backend(FloatType)
-    b = vcat(reverse(problem.initial_bathymetry[2:2] .+ β[2:2]),
-             problem.initial_bathymetry .+ β,
-             reverse(problem.initial_bathymetry[end-1:end-1] .+ β[end-1:end-1]))
+    b = make_bathymetry(problem.initial_bathymetry, β, problem._reconstruction)
     bathymetry = SinFVM.BottomTopography1D(b, backend, problem._grid)
     equation = SinFVM.ShallowWaterEquations1D(bathymetry)
     numericalflux = SinFVM.CentralUpwind(equation)
     # conserved_system = SinFVM.ConservedSystem(backend, problem._reconstruction.r, numericalflux, equation, problem._grid, [DryFrontTerm()])
-    conserved_system = SinFVM.ConservedSystem(backend, problem._reconstruction.r, numericalflux, equation, problem._grid, [SinFVM.SourceTermBottom()])
-    simulator = SinFVM.Simulator(backend, conserved_system, problem._timestepper.t, problem._grid)
+    conserved_system = SinFVM.ConservedSystem(backend, get(problem._reconstruction), numericalflux, equation, problem._grid, [SinFVM.SourceTermBottom()])
+    simulator = SinFVM.Simulator(backend, conserved_system, get(problem._timestepper), problem._grid)
 
     U_adjusted = adjust_to_bathymetry_changes(problem.u0, β)
     SinFVM.set_current_state!(simulator, U_adjusted.U)

@@ -2,7 +2,7 @@ using OptimalBath: GradientType, PrimalSWEProblem
 import OptimalBath: solve_primal, compute_Δx, create_callback, initial_state
 using StaticArrays, Test
 
-struct PrimalSWETestProblem <: PrimalSWEProblem
+struct PrimalSWETestProblem <: PrimalSWEProblem{NoReconstruction, ForwardEuler}
     initial_bathymetry::Vector{Float64}
     function PrimalSWETestProblem(N)
         initial_bathymetry = zeros(Float64, N + 1)

@@ -1,11 +1,19 @@
 export PrimalSWEProblem, solve_primal, solve_adjoint, Reconstruction, TimeStepper
 
 
-abstract type PrimalSWEProblem end
-
 abstract type Reconstruction end
 
 abstract type TimeStepper end
+
+abstract type PrimalSWEProblem{R<:Reconstruction, T<:TimeStepper} end
+
+struct LinearReconstruction <: Reconstruction end
+
+struct NoReconstruction <: Reconstruction end
+
+struct ForwardEuler <: TimeStepper end
+
+struct RK2 <: TimeStepper end
 
 function solve_adjoint end
 
