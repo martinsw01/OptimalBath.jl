@@ -101,8 +101,6 @@ function compute_next_Λ(Λl, Λc, Λr, Ul, Uc, Ur, dJdU, bl, br, Δt, Δx)
     Λc + Δt * compute_semi_discrete_derivative(Λl, Λc, Λr, Ul, Uc, Ur, dJdU, bl, br, Δt, Δx)
 end
 
-const AverageDepthStates{T, N, A} = States{Average, Depth, T, N, A}
-
 function solve_adjoint(Λ0, U::AverageDepthStates, dJdU, b, t, Δx)
     U = U.U
     Λ = similar(U)

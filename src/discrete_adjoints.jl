@@ -2,6 +2,10 @@ export DiscreteAdjoint, TestDiscreteAdjoint, StepWiseTestDiscreteAdjoint
 
 using ForwardDiff: jacobian
 using SinFVM: CentralUpwind, ShallowWaterEquations1D, XDIR
+using StaticArrays: @SMatrix, SMatrix
+
+import OptimalBath: solve_adjoint
+using OptimalBath
 
 
 const _numerical_flux = CentralUpwind(ShallowWaterEquations1D())
@@ -12,6 +16,9 @@ struct DiscreteAdjoint <: Adjoint
     primal::SinFVMPrimalSWEProblem
 end
 
+function compute_ghost_cell(U)
+    typeof(U)(U[1], -U[2])
+end
 
 function flux_left_grad_center(Ul, Uc)
     return jacobian(Uc) do U
@@ -65,6 +72,14 @@ function determine_time_step_index(U)
     findmax(compute_max_abs_eigval, U)
 end
 
+# Derivative of eigenvalue wrt h
+function eigval_derivative_h(U::State)
+    h, p = U
+    ∂a∂h = - sign(p) * p/h^2 + 0.5 * sqrt(9.81/h)
+    return ∂a∂h
+end 
+
+# Gradient of eigenvalue wrt U
 function eigval_gradient(U::State)
     h, p = U
     p_sgn = sign(p)
@@ -83,14 +98,26 @@ function compute_timestep_gradient(CFL, Δx, Ui, wave_speed)
     return τ
 end
 
-function add_timestep_source!(Λ_prev, Λ_next, U_next, U_prev, μ_final, J_final, Δt, Δx, CFL, objectives, local_correction=1)
+function compute_timestep_derivative_h(CFL, Δx, Ui, wave_speed)
+    ∂a∂h = eigval_derivative_h(Ui)
+    τ = - CFL * Δx / wave_speed^2 * ∂a∂h
+    return τ
+end
+
+@warn "Removed variable time step source"
+function compute_timestep_source(Λ_next, U_next, U_prev, μ_final, J_final, Δt, Δx, CFL, objectives, timestep_gradient, local_correction=1)
     wave_speed, i = determine_time_step_index(U_prev)
-    τ = compute_timestep_gradient(CFL, Δx, U_prev[i], wave_speed)
+    τ = timestep_gradient(CFL, Δx, U_prev[i], wave_speed)
     μ_step = compute_timestep_correction(Λ_next, U_prev, U_next, Δt)
     J_step = compute_objective_step(U_prev, Δx, Δt, objectives)
     Δμ = local_correction * (μ_step - μ_final)
     ΔJ = J_step - J_final
-    Λ_prev[i] += (Δμ + ΔJ) * τ
+    return i, zero((Δμ + ΔJ) * τ)
+end
+
+function add_timestep_source!(Λ_prev, Λ_next, U_next, U_prev, μ_final, J_final, Δt, Δx, CFL, objectives, local_correction=1)
+    i, source = compute_timestep_source(Λ_next, U_next, U_prev, μ_final, J_final, Δt, Δx, CFL, objectives, compute_timestep_gradient, local_correction)
+    Λ_prev[i] += source
 end
 
 # Only used for the adjoint dot product test
@@ -103,7 +130,7 @@ function add_objective_timestep_source!(Λ_prev, U_prev, J_final, Δt, Δx, CFL,
 end
 
 function set_flux_jvp_left_boundary!(Λ1, Λ2, Uc, Ur, Δt, Δx, da::DiscreteAdjoint)
-    Ul = compute_ghost_cell(Uc, nothing)
+    Ul = compute_ghost_cell(Uc)
     
     A = @SMatrix [1 0; 0 -1]
     dFldU_ghost = flux_right_grad_center(Ul, Uc) * A
@@ -126,7 +153,7 @@ function set_flux_jvp_interior!(Λl, Λc, Λr, Ul, Uc, Ur, Δt, Δx, da::Discret
 end
 
 function set_flux_jvp_right_boundary!(Λl, Λc, Ul, Uc, Δt, Δx, da::DiscreteAdjoint)
-    Ur = compute_ghost_cell(Uc, nothing)
+    Ur = compute_ghost_cell(Uc)
     
     dFldU = flux_left_grad_center(Ul, Uc)
     dFrdU = flux_right_grad_center(Uc, Ur)
@@ -151,16 +178,17 @@ function set_flux_jvp!(Λ, U, N, n, Δx, Δt, da::DiscreteAdjoint)
                                              Δt, Δx, da)
 end
 
-function add_objective_source!(Λ, objectives, U, Δt)
+function add_objective_source!(Λ, objectives, U, Δt, Δx)
     indices = objectives.objective_indices
     objective = objectives.interior_objective
-    Λ[indices] .+= objective_density_gradient.(objective, @view U[indices]) * Δt
+    Λ[indices] .+= objective_density_gradient.(objective, @view U[indices]) * Δt * Δx
 end
 
 function compute_objective_step(U, Δx, Δt, objectives::Objectives)
     indices = objectives.objective_indices
     objective = objectives.interior_objective
-    return sum(objective_density.(objective, @view U[indices])) * Δx * Δt
+    Jn = sum(objective_density.(objective, @view U[indices])) * Δx * Δt
+    return Jn
 end
 
 
@@ -177,7 +205,7 @@ end
     for n in M:-1:2
         Δt = t[n] - t[n-1]
         set_flux_jvp!(Λ, U, N, n, Δx, Δt, da)
-        add_objective_source!(Λ[:, n-1], objectives, U[:, n-1], Δt)
+        add_objective_source!(Λ[:, n-1], objectives, U[:, n-1], Δt, Δx)
         if n < M
             add_timestep_source!(Λ[:, n-1], Λ[:, n], U[:, n], U[:, n-1], μ_final, J_final, Δt, Δx, 0.25, objectives)
         end

@@ -1,3 +1,5 @@
+export Energy, KineticEnergy, SquaredMomentum, Mass, NoObjective
+
 struct Energy <: Objective end
 struct KineticEnergy <: Objective end
 struct SquaredMomentum <: Objective end
@@ -31,8 +33,8 @@ function objective_density(::SquaredMomentum, U)
 end
 
 function objective_density(::Mass, U)
-    # return U[1]
-    return U[1]^2
+    return U[1]
+    # return U[1]^2
 end
 
 function objective_density(::NoObjective, U)
@@ -60,10 +62,10 @@ function _compute_objective(U::States, t, x, β, objectives)
     for n in 1:lastindex(t)-1
         Δt = t[n+1] - t[n]
 
-        interior_integral += 0.5 * sum(objective_density(objectives.interior_objective,
+        interior_integral += sum(objective_density(objectives.interior_objective,
                                                          U,
                                                          objectives.objective_indices,
-                                                         n:n+1)) * Δt * Δx
+                                                         n)) * Δt * Δx
     end
 
     terminal_integral = sum(objective_density(objectives.terminal_objective,

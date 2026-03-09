@@ -5,11 +5,9 @@ include("interfaces/gradients.jl")
 include("interfaces/forward_solvers.jl")
 
 include("PrimalSWE.jl")
+include("AdjointSWE.jl")
 include("gradients/Gradients.jl")
 include("solver.jl")
-include("AdjointSWE.jl")
 include("objectives.jl")
-
-include("discrete_adjoints.jl")
 
 end

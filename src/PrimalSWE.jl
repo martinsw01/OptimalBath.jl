@@ -41,7 +41,7 @@ struct SinFVMPrimalSWEProblem <: PrimalSWEProblem
                               domain = [0.0 1.0],
                               make_backend=SinFVM.make_cpu_backend,
                               initial_bathymetry=zeros(N + 1),
-                              grid=SinFVM.CartesianGrid(N; gc=2, boundary=SinFVM.WallBC(), extent = domain),
+                              grid=SinFVM.CartesianGrid(N; gc=1, boundary=SinFVM.WallBC(), extent = domain),
                               reconstruction::Reconstruction=LinearReconstruction(),
                               timestepper::TimeStepper=RK2()) where {FloatType, D, A}
         @assert length(initial_bathymetry) == N + 1 "Bathymetry must have length N+1=$(N + 1) ≠ $(length(initial_bathymetry))"
@@ -58,13 +58,14 @@ end
 function _create_simulator(problem, β)
     FloatType = eltype(β)
     backend = problem._make_backend(FloatType)
-    b = vcat(reverse(problem.initial_bathymetry[1:2] .+ β[1:2]),
+    b = vcat(reverse(problem.initial_bathymetry[2:2] .+ β[2:2]),
              problem.initial_bathymetry .+ β,
-             reverse(problem.initial_bathymetry[end-1:end] .+ β[end-1:end]))
+             reverse(problem.initial_bathymetry[end-1:end-1] .+ β[end-1:end-1]))
     bathymetry = SinFVM.BottomTopography1D(b, backend, problem._grid)
     equation = SinFVM.ShallowWaterEquations1D(bathymetry)
     numericalflux = SinFVM.CentralUpwind(equation)
-    conserved_system = SinFVM.ConservedSystem(backend, problem._reconstruction.r, numericalflux, equation, problem._grid, [DryFrontTerm()])
+    # conserved_system = SinFVM.ConservedSystem(backend, problem._reconstruction.r, numericalflux, equation, problem._grid, [DryFrontTerm()])
+    conserved_system = SinFVM.ConservedSystem(backend, problem._reconstruction.r, numericalflux, equation, problem._grid, [SinFVM.SourceTermBottom()])
     simulator = SinFVM.Simulator(backend, conserved_system, problem._timestepper.t, problem._grid)
 
     U_adjusted = adjust_to_bathymetry_changes(problem.u0, β)

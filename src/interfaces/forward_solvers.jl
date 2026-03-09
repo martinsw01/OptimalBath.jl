@@ -1,4 +1,4 @@
-export PrimalSWEProblem, solve_primal, Reconstruction, TimeStepper
+export PrimalSWEProblem, solve_primal, solve_adjoint, Reconstruction, TimeStepper
 
 
 abstract type PrimalSWEProblem end
@@ -6,6 +6,8 @@ abstract type PrimalSWEProblem end
 abstract type Reconstruction end
 
 abstract type TimeStepper end
+
+function solve_adjoint end
 
 """
     solve_primal(primal_swe_problem::PrimalSWEProblem, bathymetry, callbacks=[])

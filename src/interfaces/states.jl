@@ -1,4 +1,4 @@
-export State, height, momentum, States, ValueType, Left, Average, Right, HeightReference, Depth, Elevation, to_depth!, unsafe_to_depth!, to_depth
+export State, height, momentum, States, ValueType, Left, Average, Right, HeightReference, Depth, Elevation, to_depth!, unsafe_to_depth!, to_depth, AverageDepthStates
 
 using StaticArrays
 
@@ -22,6 +22,8 @@ struct States{VT<:ValueType, HR<:HeightReference, T, N, A<:AbstractArray{State{T
         return new{VT, HR, T, N, typeof(U)}(U)
     end
 end
+
+const AverageDepthStates{T, N, A} = States{Average, Depth, T, N, A}
 
 # Base.size(U::States) = size(U.U)
 # Base.getindex(U::States{VT, HR, T, N, A}, I...) where {VT, HR, T, N, A} = States{VT, HR}(U.U[I...])

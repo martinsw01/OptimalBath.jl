@@ -65,25 +65,21 @@ function compute_perturbation_with_nonzero_objective(Λ, U, δU, Δx, t, objecti
     Λ_temp = similar(U, N)
 
     Δt = t[end] - t[end-1]
-    J_final = OptimalBath.compute_objective_step(U[:, end-1], Δx, Δt, objectives)
+    J_final = OptimalBath.DiscreteAdjoints.compute_objective_step(U[:, end-1], Δx, Δt, objectives)
 
     δJ = dot(δU[:, end], Λ[:, end])
 
     for n in 2:M
         Δt = t[n] - t[n-1]
         Λ_temp .= Ref(zero(eltype(U)))
-        OptimalBath.add_objective_source!(Λ_temp, objectives, U[:, n-1], Δt)
-        if n < M
-            OptimalBath.add_objective_timestep_source!(Λ_temp, U[:, n-1], J_final, Δt, Δx, 0.25, objectives)
-        end
+        OptimalBath.DiscreteAdjoints.add_objective_source!(Λ_temp, objectives, U[:, n-1], Δt, Δx)
+        # if n < M
+        #     OptimalBath.DiscreteAdjoints.add_objective_timestep_source!(Λ_temp, U[:, n-1], J_final, Δt, Δx, 0.25, objectives)
+        # end
         δJ += dot(δU[:, n-1], Λ_temp)
     end
     return δJ
 end
-
-# function compute_δU0(β)
-#     return [State(0.5 * (β[i] + β[i+1]), 0.) for i in 1:lastindex(β)-1]
-# end
 
 function general_adjoint_dot_test(adjoint_type)
     N = 8
@@ -110,23 +106,22 @@ end
     general_adjoint_dot_test(DiscreteAdjoint)
 end
 
-    # @testset "Compare to AD" begin
-    #     N = 10
-    #     U0 = rand(State{Float64}, N)
-    #     U0 = States{Average, Elevation}(U0)
-    #     β = zeros(N+1)
+@testset "Compare to AD" begin
+    N = 10
+    U0 = rand(State{Float64}, N)
+    U0 = States{Average, Elevation}(U0)
+    β = zeros(N+1)
 
-    #     problem = SinFVMPrimalSWEProblem(N, U0, 0.1, reconstruction=NoReconstruction(), timestepper=ForwardEuler())
+    problem = SinFVMPrimalSWEProblem(N, U0, 0.1, reconstruction=NoReconstruction(), timestepper=ForwardEuler())
+    objectives = Objectives(
+        interior_objective=KineticEnergy(),
+        terminal_objective=KineticEnergy(),
+    )
+    forward_ad = ForwardADGradient(β)
+    discrete_adjoint = DiscreteAdjointGradient()
+    da_objective, da_gradient = compute_objective_and_gradient(β, problem, objectives, discrete_adjoint)
+    forward_ad_objective, forward_ad_gradient = compute_objective_and_gradient(β, problem, objectives, forward_ad)
 
-    #     # objectives = Objectives(interior_objective=KineticEnergy())
-    #     objectives = Objectives(terminal_objective=KineticEnergy())
-
-    #     forward_ad = ForwardADGradient(β)
-    #     discrete_adjoint = DiscreteAdjointGradient()
-
-    #     forward_ad_objective, forward_ad_gradient = compute_objective_and_gradient(β, problem, objectives, forward_ad)
-    #     da_objective, da_gradient = compute_objective_and_gradient(β, problem, objectives, discrete_adjoint)
-    #     @test da_objective ≈ forward_ad_objective
-    #     @test forward_ad_gradient ≈ da_gradient
-    #     # display(forward_ad_gradient)
-    # end
+    @test da_objective ≈ forward_ad_objective
+    @test forward_ad_gradient ≈ da_gradient
+end

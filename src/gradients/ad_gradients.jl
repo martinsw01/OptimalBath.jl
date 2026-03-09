@@ -26,6 +26,14 @@ function extrapolate_β_to_full_domain(β, design_indices, N)
     return full_β
 end
 
+function to_real(x::Float64)
+    return x
+end
+
+function to_real(x)
+    return x.value
+end
+
 function compute_objective_and_gradient!(G, β, primal_swe_problem::PrimalSWEProblem, objectives::Objectives, ad::ADGradient)
     function solve_and_compute_objective(β)
         db = extrapolate_β_to_full_domain(β, objectives.design_indices, length(initial_state(primal_swe_problem).U))
@@ -35,12 +43,13 @@ function compute_objective_and_gradient!(G, β, primal_swe_problem::PrimalSWEPro
 
         Δx = compute_Δx(primal_swe_problem)
         U_depth = to_depth(initial_state(primal_swe_problem), adjusted_bathymetry)
-        f_prev = sum(objective_density(objectives.interior_objective, U_depth, objectives.objective_indices))
+        f_prev = typeof(objective)(sum(to_real, objective_density(objectives.interior_objective, U_depth, objectives.objective_indices)))
 
         function integrate_objective_one_step(U_n, t_n, Δt)
             to_depth!(U_depth, U_n, adjusted_bathymetry)
             f_next = sum(objective_density(objectives.interior_objective, U_depth, objectives.objective_indices))
-            objective += 0.5 * (f_next + f_prev) * Δt * Δx
+            # objective += 0.5 * (f_next + f_prev) * Δt * Δx
+            objective += f_prev * Δt * Δx
             f_prev = f_next
         end
 
@@ -48,9 +57,11 @@ function compute_objective_and_gradient!(G, β, primal_swe_problem::PrimalSWEPro
 
         solve_primal(primal_swe_problem, db, integration_callback)
 
-        objective += sum(objective_density(objectives.terminal_objective,
+        densities = objective_density(objectives.terminal_objective,
                                            U_depth,
-                                           objectives.objective_indices)) * Δx
+                                           objectives.objective_indices)
+
+        objective += sum(densities) * Δx
 
         return objective
     end

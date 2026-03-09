@@ -21,3 +21,8 @@ end
 
 include("AdjointApproachGradients.jl")
 include("ad_gradients.jl")
+include("da_approach_gradients.jl")
+
+using .DiscreteAdjoints: DiscreteAdjointGradient, DiscreteAdjoint
+
+export DiscreteAdjointGradient, DiscreteAdjoint
