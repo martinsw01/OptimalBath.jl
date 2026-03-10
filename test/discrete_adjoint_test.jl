@@ -64,8 +64,7 @@ function compute_perturbation_with_nonzero_objective(Λ, U, δU, Δx, t, objecti
     N, M = size(U)
     Λ_temp = similar(U, N)
 
-    Δt = t[end] - t[end-1]
-    J_final = OptimalBath.DiscreteAdjoints.compute_objective_step(U[:, end-1], Δx, Δt, objectives)
+    J_final = OptimalBath.DiscreteAdjoints.compute_objective_step(U[:, end-1], Δx, objectives)
 
     δJ = dot(δU[:, end], Λ[:, end])
 
@@ -73,9 +72,9 @@ function compute_perturbation_with_nonzero_objective(Λ, U, δU, Δx, t, objecti
         Δt = t[n] - t[n-1]
         Λ_temp .= Ref(zero(eltype(U)))
         OptimalBath.DiscreteAdjoints.add_objective_source!(Λ_temp, objectives, U[:, n-1], Δt, Δx)
-        # if n < M
-        #     OptimalBath.DiscreteAdjoints.add_objective_timestep_source!(Λ_temp, U[:, n-1], J_final, Δt, Δx, 0.25, objectives)
-        # end
+        if n < M
+            OptimalBath.DiscreteAdjoints.add_objective_timestep_source!(Λ_temp, U[:, n-1], J_final, Δx, 0.25, objectives)
+        end
         δJ += dot(δU[:, n-1], Λ_temp)
     end
     return δJ

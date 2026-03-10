@@ -8,7 +8,7 @@ struct AdjointApproachGradient{BathymetryBuffer} <: GradientType
     end
 end
 
-function compute_objective_and_gradient!(G, β, primal_swe_problem::PrimalSWEProblem, objectives::Objectives, aag::AdjointApproachGradient)
+function compute_objective_and_gradient!(G, β, primal_swe_problem::PrimalSWEProblem{R, TS}, objectives::Objectives, aag::AdjointApproachGradient) where {R, TS}
     δb = extrapolate_β_to_full_domain(β, objectives.design_indices, length(initial_state(primal_swe_problem).U))
 
     (Ul, Ur), t, x = solve_primal(primal_swe_problem, δb)
@@ -25,7 +25,7 @@ function compute_objective_and_gradient!(G, β, primal_swe_problem::PrimalSWEPro
     Λ = solve_adjoint(Λ0, Ul, Ur, dJdU, primal_swe_problem.initial_bathymetry .+ δb, t, Δx)
 
     compute_gradient!(G, Λ, Ul, Ur, t, objectives.design_indices)
-    objective = compute_objective(Ul, Ur, t, x, β, objectives)
+    objective = compute_objective(Ul, Ur, t, x, β, objectives, TS)
 end
 
 function update_bathymetry!(aag::AdjointApproachGradient, indices, β)

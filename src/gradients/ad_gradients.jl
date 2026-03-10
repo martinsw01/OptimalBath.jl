@@ -34,7 +34,7 @@ function to_real(x)
     return x.value
 end
 
-function compute_objective_and_gradient!(G, β, primal_swe_problem::PrimalSWEProblem, objectives::Objectives, ad::ADGradient)
+function compute_objective_and_gradient!(G, β, primal_swe_problem::PrimalSWEProblem{NoReconstruction, TimeStepperType}, objectives::Objectives, ad::ADGradient) where TimeStepperType
     function solve_and_compute_objective(β)
         db = extrapolate_β_to_full_domain(β, objectives.design_indices, length(initial_state(primal_swe_problem).U))
         adjusted_bathymetry = db .+ primal_swe_problem.initial_bathymetry
@@ -49,7 +49,7 @@ function compute_objective_and_gradient!(G, β, primal_swe_problem::PrimalSWEPro
             to_depth!(U_depth, U_n, adjusted_bathymetry)
             f_next = sum(objective_density(objectives.interior_objective, U_depth, objectives.objective_indices))
             # objective += 0.5 * (f_next + f_prev) * Δt * Δx
-            objective += f_prev * Δt * Δx
+            objective += interior_objective_increment(f_prev, f_next, Δt, Δx, TimeStepperType)
             f_prev = f_next
         end
 
@@ -71,6 +71,14 @@ function compute_objective_and_gradient!(G, β, primal_swe_problem::PrimalSWEPro
     G .= get_gradient(ad)
 
     return objective
+end
+
+function interior_objective_increment(f_prev, f_next, Δt, Δx, ::Type{ForwardEuler})
+    return f_prev * Δt * Δx
+end
+
+function interior_objective_increment(f_prev, f_next, Δt, Δx, ::Type{RK2})
+    return 0.5 * (f_next + f_prev) * Δt * Δx
 end
 
 include("ForwardADGradients.jl")

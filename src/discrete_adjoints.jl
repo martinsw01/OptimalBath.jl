@@ -72,13 +72,6 @@ function determine_time_step_index(U)
     findmax(compute_max_abs_eigval, U)
 end
 
-# Derivative of eigenvalue wrt h
-function eigval_derivative_h(U::State)
-    h, p = U
-    ∂a∂h = - sign(p) * p/h^2 + 0.5 * sqrt(9.81/h)
-    return ∂a∂h
-end 
-
 # Gradient of eigenvalue wrt U
 function eigval_gradient(U::State)
     h, p = U
@@ -98,33 +91,26 @@ function compute_timestep_gradient(CFL, Δx, Ui, wave_speed)
     return τ
 end
 
-function compute_timestep_derivative_h(CFL, Δx, Ui, wave_speed)
-    ∂a∂h = eigval_derivative_h(Ui)
-    τ = - CFL * Δx / wave_speed^2 * ∂a∂h
-    return τ
-end
-
-@warn "Removed variable time step source"
-function compute_timestep_source(Λ_next, U_next, U_prev, μ_final, J_final, Δt, Δx, CFL, objectives, timestep_gradient, local_correction=1)
+function compute_timestep_source(Λ_next, U_next, U_prev, μ_final, J_final, Δt, Δx, CFL, objectives, local_correction=1)
     wave_speed, i = determine_time_step_index(U_prev)
-    τ = timestep_gradient(CFL, Δx, U_prev[i], wave_speed)
+    τ = compute_timestep_gradient(CFL, Δx, U_prev[i], wave_speed)
     μ_step = compute_timestep_correction(Λ_next, U_prev, U_next, Δt)
-    J_step = compute_objective_step(U_prev, Δx, Δt, objectives)
+    J_step = compute_objective_step(U_prev, Δx, objectives)
     Δμ = local_correction * (μ_step - μ_final)
     ΔJ = J_step - J_final
-    return i, zero((Δμ + ΔJ) * τ)
+    return i, (Δμ + ΔJ) * τ
 end
 
 function add_timestep_source!(Λ_prev, Λ_next, U_next, U_prev, μ_final, J_final, Δt, Δx, CFL, objectives, local_correction=1)
-    i, source = compute_timestep_source(Λ_next, U_next, U_prev, μ_final, J_final, Δt, Δx, CFL, objectives, compute_timestep_gradient, local_correction)
+    i, source = compute_timestep_source(Λ_next, U_next, U_prev, μ_final, J_final, Δt, Δx, CFL, objectives, local_correction)
     Λ_prev[i] += source
 end
 
 # Only used for the adjoint dot product test
-function add_objective_timestep_source!(Λ_prev, U_prev, J_final, Δt, Δx, CFL, objectives)
+function add_objective_timestep_source!(Λ_prev, U_prev, J_final, Δx, CFL, objectives)
     wave_speed, i = determine_time_step_index(U_prev)
     τ = compute_timestep_gradient(CFL, Δx, U_prev[i], wave_speed)
-    J_step = compute_objective_step(U_prev, Δx, Δt, objectives)
+    J_step = compute_objective_step(U_prev, Δx, objectives)
     ΔJ = J_step - J_final
     Λ_prev[i] += ΔJ * τ
 end
@@ -184,10 +170,10 @@ function add_objective_source!(Λ, objectives, U, Δt, Δx)
     Λ[indices] .+= objective_density_gradient.(objective, @view U[indices]) * Δt * Δx
 end
 
-function compute_objective_step(U, Δx, Δt, objectives::Objectives)
+function compute_objective_step(U, Δx, objectives::Objectives)
     indices = objectives.objective_indices
     objective = objectives.interior_objective
-    Jn = sum(objective_density.(objective, @view U[indices])) * Δx * Δt
+    Jn = sum(objective_density.(objective, @view U[indices])) * Δx
     return Jn
 end
 
@@ -198,7 +184,7 @@ end
 
     Δt = t[end] - t[end-1]
     μ_final = compute_timestep_correction(Λ0, U[:, end-1], U[:, end], Δt)
-    J_final = compute_objective_step(U[:, end-1], Δx, Δt, objectives)
+    J_final = compute_objective_step(U[:, end-1], Δx, objectives)
 
     N, M = size(U)
     Λ[:, end] .= Λ0
