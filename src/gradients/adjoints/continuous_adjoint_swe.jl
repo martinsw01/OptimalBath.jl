@@ -1,4 +1,6 @@
-export solve_adjoint
+export ContinuousAdjointSWE
+
+struct ContinuousAdjointSWE <: AdjointSWE end
 
 using StaticArrays
 
@@ -77,31 +79,31 @@ function compute_bathymetry_source(Λ, bl, br, Δx)
     return @SVector [S2 * λ2, 0.0]
 end
 
-function compute_next_Λ_left_boundary(Λc, Λr, Uc, Ur, dJdU, bl, br, Δt, Δx)
+function compute_next_Λ_left_boundary(Λc, Λr, Uc, Ur, bl, br, Δt, Δx)
     Λl = compute_adjoint_ghost_cell(Λc, Λr, Uc)
     Ul = compute_ghost_cell(Uc, Ur)
-    return compute_next_Λ(Λl, Λc, Λr, Ul, Uc, Ur, dJdU, bl, br, Δt, Δx)
+    return compute_next_Λ(Λl, Λc, Λr, Ul, Uc, Ur, bl, br, Δt, Δx)
 end
 
-function compute_next_Λ_right_boundary(Λl, Λc, Ul, Uc, dJdU, bl, br, Δt, Δx)
+function compute_next_Λ_right_boundary(Λl, Λc, Ul, Uc, bl, br, Δt, Δx)
     Λr = compute_adjoint_ghost_cell(Λc, Λl, Uc)
     Ur = compute_ghost_cell(Uc, Ul)
-    return compute_next_Λ(Λl, Λc, Λr, Ul, Uc, Ur, dJdU, bl, br, Δt, Δx)
+    return compute_next_Λ(Λl, Λc, Λr, Ul, Uc, Ur, bl, br, Δt, Δx)
 end
 
-function compute_semi_discrete_derivative(Λl, Λc, Λr, Ul, Uc, Ur, dJdU, bl, br, Δt, Δx)        
+function compute_semi_discrete_derivative(Λl, Λc, Λr, Ul, Uc, Ur, bl, br, Δt, Δx)        
     Fl = numerical_flux(Λl, Λc, Ul, Uc)
     Fr = numerical_flux(Λc, Λr, Uc, Ur)
     dfₓᵀΛ = compute_flux_source(Λc, Ul, Ur, Δx)
     SᵀΛ = compute_bathymetry_source(Λc, bl, br, Δx)
-    return - (Fr - Fl)/Δx - dfₓᵀΛ + SᵀΛ + dJdU
+    return - (Fr - Fl)/Δx - dfₓᵀΛ + SᵀΛ
 end
 
-function compute_next_Λ(Λl, Λc, Λr, Ul, Uc, Ur, dJdU, bl, br, Δt, Δx)
-    Λc + Δt * compute_semi_discrete_derivative(Λl, Λc, Λr, Ul, Uc, Ur, dJdU, bl, br, Δt, Δx)
+function compute_next_Λ(Λl, Λc, Λr, Ul, Uc, Ur, bl, br, Δt, Δx)
+    Λc + Δt * compute_semi_discrete_derivative(Λl, Λc, Λr, Ul, Uc, Ur, bl, br, Δt, Δx)
 end
 
-function solve_adjoint(Λ0, U::AverageDepthStates, dJdU, b, t, Δx)
+function solve_adjoint(Λ0, U::AverageDepthStates, objectives::Objectives, b, t, Δx, ca::ContinuousAdjointSWE)
     U = U.U
     Λ = similar(U)
     N, M = size(U)
@@ -110,22 +112,20 @@ function solve_adjoint(Λ0, U::AverageDepthStates, dJdU, b, t, Δx)
         Δt = t[n] - t[n-1]
         Λ[1, n-1] = compute_next_Λ_left_boundary(Λ[1:2, n]...,
                                                  U[1:2, n]...,
-                                                 dJdU[1, n],
                                                  b[1:2]...,
                                                  Δt, Δx)
         for i in 2:N-1
             Λ[i, n-1] = compute_next_Λ(Λ[i-1:i+1, n]...,
                                        U[i-1:i+1, n]...,
-                                       dJdU[i, n],
                                        0.25*(b[i-1] + b[i]),
                                        0.25*(b[i+1] + b[i+2]),
                                        Δt, Δx)
         end
         Λ[N, n-1] = compute_next_Λ_right_boundary(Λ[N-1:N, n]...,
                                                   U[N-1:N, n]...,
-                                                  dJdU[N, n],
                                                   b[N:N+1]...,
                                                   Δt, Δx)
+        add_objective_source!(Λ[:, n-1], U[:, n], Δt, Δx, objectives, ca)
     end
     return Λ
 end
@@ -140,7 +140,15 @@ only_left_dry(Ul⁺, Uc⁻, Uc⁺, Ur⁻) = left_interface_dry(Ul⁺, Uc⁻) && 
 only_right_dry(Ul⁺, Uc⁻, Uc⁺, Ur⁻) = right_interface_dry(Uc⁺, Ur⁻) && !left_interface_dry(Ul⁺, Uc⁻)
 
 
-function solve_adjoint(Λ0, Ul::LeftDepthStates, Ur::RightDepthStates, dJdU, b, t, Δx)
+function add_objective_source!(Λ, Ul, Ur, Δt, Δx, objectives::Objectives, ::ContinuousAdjointSWE)
+    return add_objective_source!(Λ, Ul, Ur, Δt, Δx, objectives)
+end
+
+function add_objective_source!(Λ, U, Δt, Δx, objectives::Objectives, ::ContinuousAdjointSWE)
+    return add_objective_source!(Λ, U, Δt, Δx, objectives)
+end
+
+function solve_adjoint(Λ0, Ul::LeftDepthStates, Ur::RightDepthStates, objectives::Objectives, b, t, Δx, ca::ContinuousAdjointSWE)
     Ul = Ul.U
     Ur = Ur.U
     Λ = similar(Ul)
@@ -152,7 +160,6 @@ function solve_adjoint(Λ0, Ul::LeftDepthStates, Ur::RightDepthStates, dJdU, b, 
         Λ[1, n-1] = compute_next_Λ_left_boundary(Λ[1:2, n]...,
                                                  Ul[1:2, n]...,
                                                  Ur[1, n],
-                                                 dJdU[1, n],
                                                  b[1:2]...,
                                                  Δt, Δx)
         for i in 2:N-1
@@ -161,21 +168,18 @@ function solve_adjoint(Λ0, Ul::LeftDepthStates, Ur::RightDepthStates, dJdU, b, 
                  Λ[i, n-1] = compute_next_Λ(Λ[i-1:i+1, n]...,
                                            Ul[i:i+1, n]...,
                                            Ur[i-1:i, n]...,
-                                           dJdU[i, n],
                                            b[i:i+1]...,
                                            Δt, Δx)
             elseif only_left_dry(stencil...)
                 Λ[i, n-1] = compute_next_Λ_left_boundary(Λ[i:i+1, n]...,
                                                         Ul[i:i+1, n]...,
                                                         Ur[i, n],
-                                                        dJdU[i, n],
                                                         b[i:i+1]...,
                                                         Δt, Δx)
             elseif only_right_dry(stencil...)
                 Λ[i, n-1] = compute_next_Λ_right_boundary(Λ[i-1:i, n]...,
                                                         Ul[i, n],
                                                         Ur[i-1:i, n]...,
-                                                        dJdU[i, n],
                                                         b[i:i+1]...,
                                                         Δt, Δx)
             else
@@ -185,38 +189,38 @@ function solve_adjoint(Λ0, Ul::LeftDepthStates, Ur::RightDepthStates, dJdU, b, 
         Λ[N, n-1] = compute_next_Λ_right_boundary(Λ[N-1:N, n]...,
                                                   Ul[N, n],
                                                   Ur[N-1:N, n]...,
-                                                  dJdU[N, n],
                                                   b[N:N+1]...,
                                                   Δt, Δx)
+        add_objective_source!(Λ[:, n-1], Ul[:, n], Ur[:, n], Δt, Δx, objectives, ca)
     end
     return Λ
 end
 
-function compute_next_Λ(Λl, Λc, Λr, Uc⁻, Ur⁻, Ul⁺, Uc⁺, dJdU, bl, br, Δt, Δx)
-    return Λc + Δt * compute_semi_discrete_derivative(Λl, Λc, Λr, Uc⁻, Ur⁻, Ul⁺, Uc⁺, dJdU, bl, br, Δt, Δx)
+function compute_next_Λ(Λl, Λc, Λr, Uc⁻, Ur⁻, Ul⁺, Uc⁺, bl, br, Δt, Δx)
+    return Λc + Δt * compute_semi_discrete_derivative(Λl, Λc, Λr, Uc⁻, Ur⁻, Ul⁺, Uc⁺, bl, br, Δt, Δx)
 end
 
 
-function compute_next_Λ_left_boundary(Λc, Λr, Uc⁻, Ur⁻, Uc⁺, dJdU, bl, br, Δt, Δx)
+function compute_next_Λ_left_boundary(Λc, Λr, Uc⁻, Ur⁻, Uc⁺, bl, br, Δt, Δx)
     Λl = compute_adjoint_ghost_cell(Λc, Λr, Uc⁻)
     # Λl = compute_ghost_cell(Λc, nothing) #compute_adjoint_ghost_cell(Λc, Λr, Uc⁻)
     Ul⁺ = compute_ghost_cell(Uc⁻, nothing)
-    return compute_next_Λ(Λl, Λc, Λr, Uc⁻, Ur⁻, Ul⁺, Uc⁺, dJdU, bl, br, Δt, Δx)
+    return compute_next_Λ(Λl, Λc, Λr, Uc⁻, Ur⁻, Ul⁺, Uc⁺, bl, br, Δt, Δx)
 end
 
-function compute_next_Λ_right_boundary(Λl, Λc, Uc⁻, Ul⁺, Uc⁺, dJdU, bl, br, Δt, Δx)
+function compute_next_Λ_right_boundary(Λl, Λc, Uc⁻, Ul⁺, Uc⁺, bl, br, Δt, Δx)
     Λr = compute_adjoint_ghost_cell(Λc, Λl, Uc⁺)
     # Λr = compute_ghost_cell(Λc, nothing) #compute_ghost_cell(Λc, nothing)
     Ur⁻ = compute_ghost_cell(Uc⁺, nothing)
-    return compute_next_Λ(Λl, Λc, Λr, Uc⁻, Ur⁻, Ul⁺, Uc⁺, dJdU, bl, br, Δt, Δx)
+    return compute_next_Λ(Λl, Λc, Λr, Uc⁻, Ur⁻, Ul⁺, Uc⁺, bl, br, Δt, Δx)
 end
 
-function compute_semi_discrete_derivative(Λl, Λc, Λr, Uc⁻, Ur⁻, Ul⁺, Uc⁺, dJdU, bl, br, Δt, Δx)        
+function compute_semi_discrete_derivative(Λl, Λc, Λr, Uc⁻, Ur⁻, Ul⁺, Uc⁺, bl, br, Δt, Δx)        
     Fl = numerical_flux_improved(Λl, Λc, Ul⁺, Uc⁻, Δx)
     Fr = numerical_flux_improved(Λc, Λr, Uc⁺, Ur⁻, Δx)
     dfₓᵀΛ = compute_flux_source_improved(Λc, Uc⁻, Uc⁺, Δx)
     SᵀΛ = compute_bathymetry_source_improved(Λc, Uc⁻, Uc⁺, bl, br, Δx)
-    return - (Fr - Fl)/Δx - dfₓᵀΛ + SᵀΛ + dJdU
+    return - (Fr - Fl)/Δx - dfₓᵀΛ + SᵀΛ
 end
 
 function compute_S2(Ul, Ur, bl, br, Δx)

@@ -1,22 +1,19 @@
-export DiscreteAdjoint, TestDiscreteAdjoint, StepWiseTestDiscreteAdjoint
+export DiscreteAdjointSWE, TestDiscreteAdjoint, StepWiseTestDiscreteAdjoint
 
 using ForwardDiff: jacobian
 using SinFVM: CentralUpwind, ShallowWaterEquations1D, XDIR
 using StaticArrays: @SMatrix, SMatrix
 
 import OptimalBath: solve_adjoint
+using .OptimalBath: compute_ghost_cell, AdjointSWE
 
 
 const _numerical_flux = CentralUpwind(ShallowWaterEquations1D())
 
 abstract type Adjoint end
 
-struct DiscreteAdjoint <: Adjoint
+struct DiscreteAdjointSWE <: AdjointSWE
     primal::SinFVMPrimalSWEProblem
-end
-
-function compute_ghost_cell(U)
-    typeof(U)(U[1], -U[2])
 end
 
 function flux_left_grad_center(Ul, Uc)
@@ -114,7 +111,7 @@ function add_objective_timestep_source!(Λ_prev, U_prev, J_final, Δx, CFL, obje
     Λ_prev[i] += ΔJ * τ
 end
 
-function set_flux_jvp_left_boundary!(Λ1, Λ2, Uc, Ur, Δt, Δx, da::DiscreteAdjoint)
+function set_flux_jvp_left_boundary!(Λ1, Λ2, Uc, Ur, Δt, Δx, da::DiscreteAdjointSWE)
     Ul = compute_ghost_cell(Uc)
     
     A = @SMatrix [1 0; 0 -1]
@@ -127,7 +124,7 @@ function set_flux_jvp_left_boundary!(Λ1, Λ2, Uc, Ur, Δt, Δx, da::DiscreteAdj
 end
 
 
-function set_flux_jvp_interior!(Λl, Λc, Λr, Ul, Uc, Ur, Δt, Δx, da::DiscreteAdjoint)
+function set_flux_jvp_interior!(Λl, Λc, Λr, Ul, Uc, Ur, Δt, Δx, da::DiscreteAdjointSWE)
     dFldU = flux_left_grad_center(Ul, Uc)
     dFrdU = flux_right_grad_center(Uc, Ur)
 
@@ -137,7 +134,7 @@ function set_flux_jvp_interior!(Λl, Λc, Λr, Ul, Uc, Ur, Δt, Δx, da::Discret
     return left' * Λl + center' * Λc + right' * Λr
 end
 
-function set_flux_jvp_right_boundary!(Λl, Λc, Ul, Uc, Δt, Δx, da::DiscreteAdjoint)
+function set_flux_jvp_right_boundary!(Λl, Λc, Ul, Uc, Δt, Δx, da::DiscreteAdjointSWE)
     Ur = compute_ghost_cell(Uc)
     
     dFldU = flux_left_grad_center(Ul, Uc)
@@ -149,7 +146,7 @@ function set_flux_jvp_right_boundary!(Λl, Λc, Ul, Uc, Δt, Δx, da::DiscreteAd
     return left' * Λl + center' * Λc
 end
 
-function set_flux_jvp!(Λ, U, N, n, Δx, Δt, da::DiscreteAdjoint)
+function set_flux_jvp!(Λ, U, N, n, Δx, Δt, da::DiscreteAdjointSWE)
     Λ[1, n-1] = set_flux_jvp_left_boundary!(Λ[1:2, n]...,
                                              U[1:2, n-1]...,
                                              Δt, Δx, da)
@@ -163,10 +160,8 @@ function set_flux_jvp!(Λ, U, N, n, Δx, Δt, da::DiscreteAdjoint)
                                              Δt, Δx, da)
 end
 
-function add_objective_source!(Λ, objectives, U, Δt, Δx)
-    indices = objectives.objective_indices
-    objective = objectives.interior_objective
-    Λ[indices] .+= objective_density_gradient.(objective, @view U[indices]) * Δt * Δx
+function add_objective_source!(Λ, U, Δt, Δx, objectives, ::DiscreteAdjointSWE)
+    OptimalBath.add_objective_source!(Λ, U, Δt, Δx, objectives)
 end
 
 function compute_objective_step(U, Δx, objectives::Objectives)
@@ -176,7 +171,7 @@ function compute_objective_step(U, Δx, objectives::Objectives)
     return Jn
 end
 
-function add_bottom_source!(Λ, n, t, Δx, b, da::DiscreteAdjoint)
+function add_bottom_source!(Λ, n, t, Δx, b, da::DiscreteAdjointSWE)
     Δt = t[n] - t[n-1]
     for j in axes(Λ, 1)
         Δb = b[j+1] - b[j]
@@ -186,7 +181,7 @@ function add_bottom_source!(Λ, n, t, Δx, b, da::DiscreteAdjoint)
 end
 
 
-@views function solve_adjoint(Λ0, U::AverageDepthStates, objectives::Objectives, b, t, Δx, da::DiscreteAdjoint)
+@views function solve_adjoint(Λ0, U::AverageDepthStates, objectives::Objectives, b, t, Δx, da::DiscreteAdjointSWE)
     U = U.U
     Λ = similar(U)
 
@@ -199,7 +194,7 @@ end
     for n in M:-1:2
         Δt = t[n] - t[n-1]
         set_flux_jvp!(Λ, U, N, n, Δx, Δt, da)
-        add_objective_source!(Λ[:, n-1], objectives, U[:, n-1], Δt, Δx)
+        add_objective_source!(Λ[:, n-1], U[:, n-1], Δt, Δx, objectives, da)
         add_bottom_source!(Λ, n, t, Δx, b, da)
         if n < M
             add_timestep_source!(Λ[:, n-1], Λ[:, n], U[:, n], U[:, n-1], μ_final, J_final, Δt, Δx, 0.25, objectives)

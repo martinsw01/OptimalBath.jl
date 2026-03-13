@@ -15,8 +15,6 @@ struct ForwardEuler <: TimeStepper end
 
 struct RK2 <: TimeStepper end
 
-function solve_adjoint end
-
 """
     solve_primal(primal_swe_problem::PrimalSWEProblem, bathymetry, callbacks=[])
 

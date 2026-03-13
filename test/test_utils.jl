@@ -2,7 +2,7 @@ using OptimalBath: GradientType, PrimalSWEProblem
 import OptimalBath: solve_primal, compute_Δx, create_callback, initial_state
 using StaticArrays, Test
 
-struct PrimalSWETestProblem{R<:Reconstruction} <: PrimalSWEProblem{NoReconstruction, ForwardEuler}
+struct PrimalSWETestProblem{R<:Reconstruction} <: PrimalSWEProblem{R, ForwardEuler}
     initial_bathymetry::Vector{Float64}
     function PrimalSWETestProblem(N, r=NoReconstruction())
         initial_bathymetry = zeros(Float64, N + 1)
@@ -78,15 +78,15 @@ end
     # @test gradient ≈ [1 + 0.5 * Δx, Δx, Δx, Δx]
 end
 
-@testset "Test AdjointApproachGradient interface" begin
-    using OptimalBath: AdjointApproachGradient, compute_objective_and_gradient, Objectives, Mass
+@testset "Test ContinuousAdjointGradient interface" begin
+    using OptimalBath: ContinuousAdjointGradient, compute_objective_and_gradient
 
     N = 10
     bathymetry = zeros(N + 1)
     β = zeros(4)
     problem = PrimalSWETestProblem(N, LinearReconstruction())
     objectives = Objectives(design_indices=[3, 4, 5, 8], interior_objective=Mass())
-    gradient_type = AdjointApproachGradient(bathymetry)
+    gradient_type = ContinuousAdjointGradient(bathymetry)
 
     objective, gradient = compute_objective_and_gradient(β, problem, objectives, gradient_type)
     
