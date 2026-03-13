@@ -42,13 +42,12 @@ function compute_objective_and_gradient!(G, β, primal_swe_problem::PrimalSWEPro
         objective = objectives.regularization(β)
 
         Δx = compute_Δx(primal_swe_problem)
-        U_depth = to_depth(initial_state(primal_swe_problem), adjusted_bathymetry)
+        U_depth = to_depth(initial_state(primal_swe_problem), typeof(objective).(primal_swe_problem.initial_bathymetry))
         f_prev = typeof(objective)(sum(to_real, objective_density(objectives.interior_objective, U_depth, objectives.objective_indices)))
 
         function integrate_objective_one_step(U_n, t_n, Δt)
             to_depth!(U_depth, U_n, adjusted_bathymetry)
             f_next = sum(objective_density(objectives.interior_objective, U_depth, objectives.objective_indices))
-            # objective += 0.5 * (f_next + f_prev) * Δt * Δx
             objective += interior_objective_increment(f_prev, f_next, Δt, Δx, TimeStepperType)
             f_prev = f_next
         end

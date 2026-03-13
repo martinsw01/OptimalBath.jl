@@ -62,21 +62,24 @@ create_callback(f, ::SWETestObjectiveProblem) = f
 initial_state(problem::SWETestObjectiveProblem) = States{Average, Elevation}(problem.U[:, 1])
 
 
-function solve_primal(problem::SWETestObjectiveProblem, bathymetry, callback)
+function solve_primal(problem::SWETestObjectiveProblem, δb, callback)
     x = problem.x
-    U = problem.U
+    U = States{Average, Elevation}(copy(problem.U))
+    OptimalBath.adjust_to_bathymetry_changes!(U, δb)
     t = problem.t
 
-    N, M = size(U)
+    N, M = size(U.U)
 
     for n in 2:M
         Δt = t[n] - t[n-1]
-        callback(States{Average, Elevation}(U[:, n]), t[n], Δt)
+        callback(States{Average, Elevation}(U.U[:, n]), t[n], Δt)
     end
 end
 
-function solve_primal(problem::SWETestObjectiveProblem, bathymetry)
-    return States{Average, Elevation}(copy(problem.U)), problem.t, problem.x
+function solve_primal(problem::SWETestObjectiveProblem, δb)
+    U = States{Average, Elevation}(copy(problem.U))
+    OptimalBath.adjust_to_bathymetry_changes!(U, δb)
+    return U, problem.t, problem.x
 end
 
 function compare_objectives(timestepper::TimeStepper)
@@ -86,10 +89,11 @@ function compare_objectives(timestepper::TimeStepper)
     β = rand(4) .- 0.5
     design_indices=[1, 2, 5, 8]
     bathymetry = copy(test_problem.initial_bathymetry)
-    bathymetry[design_indices] .+= β
+    δb = zero(bathymetry)
+    δb[design_indices] .+= β
 
-    U, t, x = solve_primal(test_problem, bathymetry)
-    U = to_depth(U, bathymetry)
+    U, t, x = solve_primal(test_problem, δb)
+    U = to_depth(U, bathymetry + δb)
 
     objectives = OptimalBath.Objectives(design_indices=design_indices,
                                         interior_objective=OptimalBath.Mass(),

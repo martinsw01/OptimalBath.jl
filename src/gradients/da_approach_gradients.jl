@@ -15,15 +15,16 @@ struct DiscreteAdjointGradient <: GradientType end
 
 function compute_objective_and_gradient!(G, β, primal_swe_problem::PrimalSWEProblem{NoReconstruction, ForwardEuler}, objectives::Objectives, ::DiscreteAdjointGradient)
     δb = extrapolate_β_to_full_domain(β, objectives.design_indices, length(initial_state(primal_swe_problem).U))
-    U, t, x = solve_primal(primal_swe_problem, β)
-    U = unsafe_to_depth!(U, primal_swe_problem.initial_bathymetry .+ δb)
+    adjusted_bathymetry = δb .+ primal_swe_problem.initial_bathymetry
+    U, t, x = solve_primal(primal_swe_problem, δb)
+    U = unsafe_to_depth!(U, adjusted_bathymetry)
 
     Δx = x[2] - x[1]
     Λ0 = zero(U.U[:, end])
     Λ0[objectives.objective_indices] .+= objective_density_gradient(objectives.terminal_objective, U, objectives.objective_indices, lastindex(t)) * Δx
 
     da = DiscreteAdjoint(primal_swe_problem)
-    Λ = solve_adjoint(Λ0, U, objectives, β, t, Δx, da)
+    Λ = solve_adjoint(Λ0, U, objectives, adjusted_bathymetry, t, Δx, da)
 
     compute_gradient!(G, Λ, U.U, t, Δx, objectives, da)
     objective = compute_objective(U, t, x, β, objectives, ForwardEuler)

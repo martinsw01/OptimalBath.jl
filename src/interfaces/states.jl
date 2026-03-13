@@ -51,7 +51,7 @@ function compute_new_depth(U::State, b::T) where {T}
     p = momentum(U)
     h_depth = max(h - b, zero(T))
     # h_depth = h - b
-    return State{T}(h_depth, p)
+    return State(h_depth, p)
 end
 
 function compute_new_depth(U, bl::T, br::T) where {T}
@@ -60,13 +60,13 @@ end
 
 function to_depth!(U::States{Average, Depth, T, N, A},
                    V::States{Average, Elevation, TT, N, AA},
-                   b::AbstractArray{T}) where {T, N, A, TT, AA}
+                   b::AbstractArray{TTT}) where {T, N, A, TT, AA, TTT}
     U.U .= compute_new_depth.(V.U, side(b, Left), side(b, Right))
 end
 
 function to_depth!(U::States{S, Depth, T, N, A},
                    V::States{S, Elevation, TT, N, AA},
-                   b::AbstractArray{T}) where {S, T, N, A, TT, AA}
+                   b::AbstractArray{TTT}) where {S, T, N, A, TT, AA, TTT}
     U.U .= compute_new_depth.(V.U, side(b, S))
 end
 

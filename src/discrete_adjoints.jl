@@ -5,7 +5,6 @@ using SinFVM: CentralUpwind, ShallowWaterEquations1D, XDIR
 using StaticArrays: @SMatrix, SMatrix
 
 import OptimalBath: solve_adjoint
-using OptimalBath
 
 
 const _numerical_flux = CentralUpwind(ShallowWaterEquations1D())
@@ -91,18 +90,18 @@ function compute_timestep_gradient(CFL, Δx, Ui, wave_speed)
     return τ
 end
 
-function compute_timestep_source(Λ_next, U_next, U_prev, μ_final, J_final, Δt, Δx, CFL, objectives, local_correction=1)
+function compute_timestep_source(Λ_next, U_next, U_prev, μ_final, J_final, Δt, Δx, CFL, objectives)
     wave_speed, i = determine_time_step_index(U_prev)
     τ = compute_timestep_gradient(CFL, Δx, U_prev[i], wave_speed)
     μ_step = compute_timestep_correction(Λ_next, U_prev, U_next, Δt)
     J_step = compute_objective_step(U_prev, Δx, objectives)
-    Δμ = local_correction * (μ_step - μ_final)
+    Δμ = μ_step - μ_final
     ΔJ = J_step - J_final
     return i, (Δμ + ΔJ) * τ
 end
 
-function add_timestep_source!(Λ_prev, Λ_next, U_next, U_prev, μ_final, J_final, Δt, Δx, CFL, objectives, local_correction=1)
-    i, source = compute_timestep_source(Λ_next, U_next, U_prev, μ_final, J_final, Δt, Δx, CFL, objectives, local_correction)
+function add_timestep_source!(Λ_prev, Λ_next, U_next, U_prev, μ_final, J_final, Δt, Δx, CFL, objectives)
+    i, source = compute_timestep_source(Λ_next, U_next, U_prev, μ_final, J_final, Δt, Δx, CFL, objectives)
     Λ_prev[i] += source
 end
 
@@ -177,6 +176,15 @@ function compute_objective_step(U, Δx, objectives::Objectives)
     return Jn
 end
 
+function add_bottom_source!(Λ, n, t, Δx, b, da::DiscreteAdjoint)
+    Δt = t[n] - t[n-1]
+    for j in axes(Λ, 1)
+        Δb = b[j+1] - b[j]
+        S12 = -9.81 * Δb * Δt / Δx
+        Λ[j, n-1] += State(S12 * momentum(Λ[j, n]), 0)
+    end
+end
+
 
 @views function solve_adjoint(Λ0, U::AverageDepthStates, objectives::Objectives, b, t, Δx, da::DiscreteAdjoint)
     U = U.U
@@ -192,6 +200,7 @@ end
         Δt = t[n] - t[n-1]
         set_flux_jvp!(Λ, U, N, n, Δx, Δt, da)
         add_objective_source!(Λ[:, n-1], objectives, U[:, n-1], Δt, Δx)
+        add_bottom_source!(Λ, n, t, Δx, b, da)
         if n < M
             add_timestep_source!(Λ[:, n-1], Λ[:, n], U[:, n], U[:, n-1], μ_final, J_final, Δt, Δx, 0.25, objectives)
         end
@@ -282,5 +291,3 @@ function solve_adjoint(Λ0, U::AverageDepthStates, dJdU, b, t, Δx, da::StepWise
     end
     return Λ
 end
-
-        

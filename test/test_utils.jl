@@ -2,11 +2,11 @@ using OptimalBath: GradientType, PrimalSWEProblem
 import OptimalBath: solve_primal, compute_Δx, create_callback, initial_state
 using StaticArrays, Test
 
-struct PrimalSWETestProblem <: PrimalSWEProblem{NoReconstruction, ForwardEuler}
+struct PrimalSWETestProblem{R<:Reconstruction} <: PrimalSWEProblem{NoReconstruction, ForwardEuler}
     initial_bathymetry::Vector{Float64}
-    function PrimalSWETestProblem(N)
+    function PrimalSWETestProblem(N, r=NoReconstruction())
         initial_bathymetry = zeros(Float64, N + 1)
-        return new(initial_bathymetry)
+        return new{typeof(r)}(initial_bathymetry)
     end
 end
 
@@ -38,15 +38,20 @@ function lake_at_rest(bathymetry)
     return fill(U, N, M), t, x
 end
 
-function solve_primal(::PrimalSWETestProblem, bathymetry)
-    U, t, x = lake_at_rest(bathymetry)
+function solve_primal(problem::PrimalSWETestProblem{LinearReconstruction}, δb)
+    U, t, x = lake_at_rest(problem.initial_bathymetry .+ δb)
     Ul = States{Left, Depth}(U)
     Ur = States{Right, Depth}(U)
     return (Ul, Ur), t, x
 end
 
-function solve_primal(problem::PrimalSWETestProblem, bathymetry, callback)
-    U, t, x = lake_at_rest(bathymetry)
+function solve_primal(problem::PrimalSWETestProblem{NoReconstruction}, δb)
+    U, t, x = lake_at_rest(δb .+ problem.initial_bathymetry)
+    return States{Average, Elevation}(U), t, x
+end
+
+function solve_primal(problem::PrimalSWETestProblem, δb, callback)
+    U, t, x = lake_at_rest(problem.initial_bathymetry .+ δb)
     Δt = step(t)
     for n in 2:lastindex(t)
         callback(States{Average, Elevation}(U[:, n]), t[n], Δt)
@@ -79,7 +84,7 @@ end
     N = 10
     bathymetry = zeros(N + 1)
     β = zeros(4)
-    problem = PrimalSWETestProblem(N)
+    problem = PrimalSWETestProblem(N, LinearReconstruction())
     objectives = Objectives(design_indices=[3, 4, 5, 8], interior_objective=Mass())
     gradient_type = AdjointApproachGradient(bathymetry)
 
