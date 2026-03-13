@@ -19,9 +19,9 @@ function preallocate_gradient(β)
     return similar(β)
 end
 
-include("AdjointApproachGradients.jl")
-include("ad_gradients.jl")
-include("da_approach_gradients.jl")
+include("adjoints/continuous_adjoint_gradients.jl")
+include("adjoints/discrete_adjoint_gradients.jl")
+include("automatic_differentiation/ad_gradients.jl")
 
 using .DiscreteAdjoints: DiscreteAdjointGradient, DiscreteAdjoint
 

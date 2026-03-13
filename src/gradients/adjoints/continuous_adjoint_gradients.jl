@@ -1,5 +1,7 @@
 export AdjointApproachGradient, compute_gradient!
 
+include("continuous_adjoint_swe.jl")
+
 struct AdjointApproachGradient{BathymetryBuffer} <: GradientType 
     bathymetry_buffer::BathymetryBuffer
     function AdjointApproachGradient(bathymetry)

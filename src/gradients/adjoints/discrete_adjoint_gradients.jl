@@ -7,7 +7,7 @@ import ..OptimalBath: compute_objective_and_gradient!
 using ForwardDiff: derivative
 using SinFVM: XDIR
 
-include("../discrete_adjoints.jl")
+include("discrete_adjoint_swe.jl")
 
 export DiscreteAdjointGradient, DiscreteAdjoint
 

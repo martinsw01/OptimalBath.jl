@@ -80,5 +80,5 @@ function interior_objective_increment(f_prev, f_next, Δt, Δx, ::Type{RK2})
     return 0.5 * (f_next + f_prev) * Δt * Δx
 end
 
-include("ForwardADGradients.jl")
-include("ReverseADGradients.jl")
+include("forward_ad_gradients.jl")
+include("reverse_ad_gradients.jl")
