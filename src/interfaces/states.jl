@@ -23,7 +23,13 @@ struct States{VT<:ValueType, HR<:HeightReference, T, N, A<:AbstractArray{State{T
     end
 end
 
+import Base: similar
+function similar(U::States{VT, HR, T, N, A}, height_reference::Type{HR2}=HR, value_type::Type{VT2}=VT, float_type::Type{S}=T) where {VT, HR, T, N, A, HR2, VT2, S}
+    return States{VT2, HR2}(similar(U.U, State{S}))
+end
+
 const AverageDepthStates{T, N, A} = States{Average, Depth, T, N, A}
+const AverageElevationStates{T, N, A} = States{Average, Elevation, T, N, A}
 
 # Base.size(U::States) = size(U.U)
 # Base.getindex(U::States{VT, HR, T, N, A}, I...) where {VT, HR, T, N, A} = States{VT, HR}(U.U[I...])

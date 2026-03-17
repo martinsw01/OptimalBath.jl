@@ -1,7 +1,7 @@
 export DiscreteAdjointSWE, TestDiscreteAdjoint, StepWiseTestDiscreteAdjoint
 
 using ForwardDiff: jacobian
-using SinFVM: CentralUpwind, ShallowWaterEquations1D, XDIR
+using VolumeFluxes: CentralUpwind, ShallowWaterEquations1D, XDIR
 using StaticArrays: @SMatrix, SMatrix
 
 import OptimalBath: solve_adjoint
@@ -13,7 +13,7 @@ const _numerical_flux = CentralUpwind(ShallowWaterEquations1D())
 abstract type Adjoint end
 
 struct DiscreteAdjointSWE <: AdjointSWE
-    primal::SinFVMPrimalSWEProblem
+    primal::VolumeFluxesSolver
 end
 
 function flux_left_grad_center(Ul, Uc)
@@ -203,86 +203,3 @@ end
     return Λ
 end
 
-struct TestDiscreteAdjoint <: Adjoint end
-
-function simulator_constructor(N, T)
-    function construct_simulator(U)
-        U = States{Average, Elevation}(unflatten(U))
-        problem = SinFVMPrimalSWEProblem(N, U, T, reconstruction=NoReconstruction(), timestepper=ForwardEuler())
-        simulator = _create_simulator(problem, zeros(eltype(eltype(U.U)), N+1))
-        return simulator
-    end
-end
-
-
-function flatten(U::AbstractVector)
-    return reduce(vcat, U)
-end
-
-function flatten(U::AbstractMatrix)
-    return reduce(vcat, vec(U))
-end
-
-function unflatten(u_flat)
-    N = length(u_flat) ÷ 2
-    [State(u_flat[2i-1:2i]) for i in 1:N]
-end
-
-function unflatten(u_flat, N)
-    M = length(u_flat) ÷ (2*N)
-    reshape(unflatten(u_flat), N, M)
-end
-
-
-function solve_adjoint(Λ0, U::AverageDepthStates, dJdU, b, t, Δx, da::TestDiscreteAdjoint)
-    U0 = to_depth(States{Average, Elevation}(U.U[:,1]), -b)
-    N = size(U.U, 1)
-    J_flat = ForwardDiff.jacobian(flatten(U0.U)) do U
-        β = zeros(eltype(eltype(U)), N+1)
-        U = States{Average, Elevation}(unflatten(U))
-        problem = SinFVMPrimalSWEProblem(N, U, last(t), reconstruction=NoReconstruction(), timestepper=ForwardEuler())
-        U, t, x = solve_primal(problem, β)
-        return flatten(U.U[:, end])
-    end
-
-    # display(J_flat')
-
-    Λ = unflatten(J_flat' * flatten(Λ0), N)
-    return Λ
-end
-
-struct StepWiseTestDiscreteAdjoint <: Adjoint end
-
-
-function solve_adjoint(Λ0, U::AverageDepthStates, dJdU, b, t, Δx, da::StepWiseTestDiscreteAdjoint)
-    U = to_depth(States{Average, Elevation}(U.U), -b)
-    U = U.U
-    Λ = similar(U)
-    N, M = size(U)
-    Λ[:, end] .= Λ0
-
-    construct_simulator = simulator_constructor(N, last(t))
-
-    J_step = DiffResults.JacobianResult(zeros(2*N))
-
-    for n in M:-1:2
-        function f(U)
-            simulator = construct_simulator(U)
-            max_dt = t[end]-t[n-1]
-            SinFVM.perform_step!(simulator, max_dt)
-            return flatten(SinFVM.current_interior_state(simulator))
-        end
-
-        ForwardDiff.jacobian!(J_step, f, flatten(U[:, n-1]))
-        U_next = unflatten(J_step.value)
-
-        d = sum(U_next - U[:, n]) do U_diff
-            sum(abs2, U_diff)
-        end
-        # @assert d < 1e-6 "Forward step does not match stored state at time step $n≤$M. $d"
-        # @assert U_next ≈ U[:, n] "Forward step does not match stored state at time step $n<$M. $d"
-
-        Λ[:, n-1] .= unflatten(J_step.derivs[1]' * flatten(Λ[:, n]))
-    end
-    return Λ
-end

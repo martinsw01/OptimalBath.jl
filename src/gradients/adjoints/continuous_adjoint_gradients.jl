@@ -10,7 +10,7 @@ struct ContinuousAdjointGradient{BathymetryBuffer} <: AdjointGradient
     end
 end
 
-function adjoint_solver(::PrimalSWEProblem, ::ContinuousAdjointGradient)
+function adjoint_solver(::PrimalSWESolver, ::ContinuousAdjointGradient)
     return ContinuousAdjointSWE()
 end
 

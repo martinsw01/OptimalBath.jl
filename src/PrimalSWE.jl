@@ -1,54 +1,60 @@
-export SinFVMPrimalSWEProblem, LinearReconstruction, NoReconstruction, ForwardEuler, RK2
+export VolumeFluxesBackend, VolumeFluxesSolver
 
-using SinFVM, ElasticArrays
+using VolumeFluxes, ElasticArrays
+
+struct VolumeFluxesBackend <: SolverBackend end
+
+function build_solver(spec::SolverSpec{PP, VolumeFluxesBackend, SO}, ::Type{FloatType}) where {PP, SO, FloatType}
+    return VolumeFluxesSolver(spec, FloatType)
+end
 
 function get(::LinearReconstruction)
-    return SinFVM.LinearReconstruction()
+    return VolumeFluxes.LinearReconstruction()
 end
 
 function get(::NoReconstruction)
-    return SinFVM.NoReconstruction()
+    return VolumeFluxes.NoReconstruction()
 end
 
 function get(::ForwardEuler)
-    return SinFVM.ForwardEulerStepper()
+    return VolumeFluxes.ForwardEulerStepper()
 end
 
 function get(::RK2)
-    return SinFVM.RungeKutta2()
+    return VolumeFluxes.RungeKutta2()
 end
 
-"""
-    SinFVMPrimalSWEProblem
+function get(::DefaultBathymetrySource)
+    return VolumeFluxes.SourceTermBottom()
+end
 
-Wrapper around SinFVM. Contains problem definition and solver parameters.
+const InitialStates{FloatType} = States{Average, Elevation, FloatType, 1, Vector{State{FloatType}}}
+
 """
-struct SinFVMPrimalSWEProblem{ReconstructionType, TimeStepperType} <: PrimalSWEProblem{ReconstructionType, TimeStepperType}
-    _make_backend
-    initial_bathymetry
-    _grid
-    _reconstruction::ReconstructionType
-    _timestepper::TimeStepperType
-    u0
-    T
-    function SinFVMPrimalSWEProblem(N,
-                              u0::States{Average, Elevation, FloatType, D, A},
-                              T;
-                              domain = [0.0 1.0],
-                              make_backend=SinFVM.make_cpu_backend,
-                              initial_bathymetry=zeros(N + 1),
-                              reconstruction::Reconstruction=LinearReconstruction(),
-                              timestepper::TimeStepper=RK2()) where {FloatType, D, A}
-        @assert length(initial_bathymetry) == N + 1 "Bathymetry must have length N+1=$(N + 1) ≠ $(length(initial_bathymetry))"
-        grid = _create_grid(N, domain, reconstruction)
-        return new{typeof(reconstruction), typeof(timestepper)}(make_backend,
-                   initial_bathymetry,
-                   grid,
-                   reconstruction,
-                   timestepper,
-                   u0,
-                   T)
-    end       
+    VolumeFluxesSolver(spec::SolverSpec, float_type)
+    VolumeFluxesSolver(problem::PrimalSWEProblem, options::SolverOptions, float_type)
+    VolumeFluxesSolver(problem::PrimalSWEProblem, reconstruction, timestepper, bathymetry_source, float_type)
+A wrapper around VolumeFluxes's SWE solver.
+"""
+struct VolumeFluxesSolver{Simulator, Problem, R, TS, BS, FloatType} <: PrimalSWESolver{R, TS, BS}
+    simulator::Simulator
+    problem::Problem
+    function VolumeFluxesSolver(spec::SolverSpec{PP, VolumeFluxesBackend, SO}, ::Type{FloatType}) where {PP, SO, FloatType}
+        problem = spec.problem
+        options = spec.solver_options
+        return VolumeFluxesSolver(problem, options, FloatType)
+    end
+    function VolumeFluxesSolver(problem::PrimalSWEProblem, options::SolverOptions{R, TS, BS}, ::Type{FloatType}) where {R, TS, BS, FloatType}
+        return VolumeFluxesSolver(problem, options.reconstruction, options.timestepper, options.bathymetry_source, FloatType)
+    end
+    function VolumeFluxesSolver(problem::PrimalSWEProblem, reconstruction::R, timestepper::TS, bathymetry_source::BS, ::Type{FloatType}) where {R, TS, BS, FloatType}
+        simulator = create_simulator(problem, reconstruction, timestepper, bathymetry_source, FloatType)
+        return new{typeof(simulator), typeof(problem), R, TS, BS, FloatType}(simulator, problem)
+    end
+end
+
+function create_grid(problem, reconstruction)
+    return _create_grid(problem.N, problem.domain, reconstruction)
 end
 
 function _create_grid(N, domain, ::LinearReconstruction)
@@ -60,53 +66,61 @@ function _create_grid(N, domain, ::NoReconstruction)
 end
 
 function _create_grid(N, domain, gc)
-    return SinFVM.CartesianGrid(N; gc=gc, boundary=SinFVM.WallBC(), extent = domain)
+    return VolumeFluxes.CartesianGrid(N; gc=gc, boundary=VolumeFluxes.WallBC(), extent = domain)
 end
 
-function make_bathymetry(initial_bathymetry, β, gc)
-    b = vcat(reverse(initial_bathymetry[2:1+gc] .+ β[2:1+gc]),
-                 initial_bathymetry .+ β,
-                 reverse(initial_bathymetry[end-gc:end-1] .+ β[end-gc:end-1]))
+@views function extrapolate_bathymetry(initial_bathymetry, float_type, gc)
+    b = similar(initial_bathymetry, float_type, length(initial_bathymetry) + 2*gc)
+    b[gc+1:end-gc] .= initial_bathymetry
+    update_bc!(b, gc)
+    # b[1:gc] .= initial_bathymetry[2*gc:-1:gc+1]
+    # b[end-gc+1:end] .= initial_bathymetry[end-2*gc+1:end-gc]
     return b
 end
 
-function make_bathymetry(initial_bathymetry, β, ::NoReconstruction)
-    return make_bathymetry(initial_bathymetry, β, 1)
+@views function update_bc!(bathymetry, gc)
+    bathymetry[1:gc] .= bathymetry[2gc+1:-1:gc+2]
+    bathymetry[end-gc+1:end] .= bathymetry[end-gc-1:-1:end-2gc]
 end
 
-function make_bathymetry(initial_bathymetry, β, ::LinearReconstruction)
-    return make_bathymetry(initial_bathymetry, β, 2)
+
+function extrapolate_bathymetry(initial_bathymetry, float_type, ::NoReconstruction)
+    return extrapolate_bathymetry(initial_bathymetry, float_type, 1)
 end
 
-function _create_simulator(problem, β)
-    FloatType = eltype(β)
-    backend = problem._make_backend(FloatType)
-    b = make_bathymetry(problem.initial_bathymetry, β, problem._reconstruction)
-    bathymetry = SinFVM.BottomTopography1D(b, backend, problem._grid)
-    equation = SinFVM.ShallowWaterEquations1D(bathymetry)
-    numericalflux = SinFVM.CentralUpwind(equation)
-    # conserved_system = SinFVM.ConservedSystem(backend, problem._reconstruction.r, numericalflux, equation, problem._grid, [DryFrontTerm()])
-    conserved_system = SinFVM.ConservedSystem(backend, get(problem._reconstruction), numericalflux, equation, problem._grid, [SinFVM.SourceTermBottom()])
-    simulator = SinFVM.Simulator(backend, conserved_system, get(problem._timestepper), problem._grid)
+function extrapolate_bathymetry(initial_bathymetry, float_type, ::LinearReconstruction)
+    return extrapolate_bathymetry(initial_bathymetry, float_type, 2)
+end
 
-    U_adjusted = adjust_to_bathymetry_changes(problem.u0, β)
-    SinFVM.set_current_state!(simulator, U_adjusted.U)
-    initialize_reconstruction!(simulator)
+function make_bathymetry(problem, reconstruction, float_type)
+    return extrapolate_bathymetry(problem.initial_bathymetry, float_type, reconstruction)
+end
+
+
+function construct_equation(problem, reconstruction, backend, grid)
+    b = make_bathymetry(problem, reconstruction, backend.realtype)
+    bathymetry = VolumeFluxes.BottomTopography1D(b, backend, grid)
+    equation = VolumeFluxes.ShallowWaterEquations1D(bathymetry)
+    return equation
+end
+
+function create_simulator(problem, reconstruction, timestepper, bathymetry_source, float_type)
+    cpu_backend = VolumeFluxes.make_cpu_backend(float_type)
+    grid = create_grid(problem, reconstruction)
+    equation = construct_equation(problem, reconstruction, cpu_backend, grid)
+    numericalflux = VolumeFluxes.CentralUpwind(equation)
+    conserved_system = VolumeFluxes.ConservedSystem(cpu_backend, get(reconstruction), numericalflux, equation, grid, [get(bathymetry_source)])
+    simulator = VolumeFluxes.Simulator(cpu_backend, conserved_system, get(timestepper), grid)
+    # VolumeFluxes.set_current_state!(simulator, problem.U0.U)
     return simulator
 end
 
-function initialize_reconstruction!(simulator)
-    # Perform one reconstruction to initialize the buffers, which are needed for the recording callback.
-    SinFVM.reconstruct!(simulator.backend, simulator.system.reconstruction, simulator.system.left_buffer, simulator.system.right_buffer, simulator.substep_outputs[1], simulator.grid, simulator.system.equation, SinFVM.XDIR)
-end
-
-function recording_callback(problem::SinFVMPrimalSWEProblem,
-                            simulator, t0)
-    U0 = SinFVM.current_interior_state(simulator)
+function recording_averages_callback(solver, t0)
+    U0 = VolumeFluxes.current_interior_state(solver.simulator)
     U = States{Average, Elevation}(ElasticMatrix(reshape(U0, :, 1)))
     t = ElasticVector([t0])
 
-    record_state = create_callback(problem) do U_n, t_n, Δt
+    record_state = create_callback(solver) do U_n, t_n, Δt
         append!(U.U, U_n.U)
         append!(t, t_n)
     end
@@ -129,59 +143,92 @@ function recording_reconstructions_callback(simulator, t0)
     return record_state, (Ul, Ur), t
 end
 
-function recording_callback(problem::SinFVMPrimalSWEProblem, ::NoReconstruction, simulator, t0)
-    return recording_callback(problem, simulator, t0)
+function recording_callback(solver::VolumeFluxesSolver{S,P, NoReconstruction, TS, BS, F}, t0) where {S, P, TS, BS, F}
+    return recording_averages_callback(solver, t0)
 end
 
-function recording_callback(::SinFVMPrimalSWEProblem, ::LinearReconstruction, simulator, t0)
-    return recording_reconstructions_callback(simulator, t0)
+function recording_callback(solver::VolumeFluxesSolver{S,P, LinearReconstruction, TS, BS, F}, t0) where {S, P, TS, BS, F}
+    return recording_reconstructions_callback(solver.simulator, t0)
 end
 
-function create_callback(f, ::SinFVMPrimalSWEProblem)
+function create_callback(f, ::VolumeFluxesSolver)
     function callback(t_n, simulator)
-        U = SinFVM.current_interior_state(simulator)
-        Δt = SinFVM.current_timestep(simulator)
+        U = VolumeFluxes.current_interior_state(simulator)
+        Δt = VolumeFluxes.current_timestep(simulator)
         f(States{Average, Elevation}(U), t_n, Δt)
     end
     return callback
 end
 
-function solve_primal(problem::SinFVMPrimalSWEProblem, β)
-    FloatType = eltype(β)
-    t0 = zero(FloatType)
+function ghost_cells(simulator)
+    return simulator.system.grid.ghostcells[1]
+end
 
-    simulator = _create_simulator(problem, β)
+function get_bathymetry(simulator)
+    simulator.system.equation.B.B
+end
 
-    callback, U, t = recording_callback(problem, problem._reconstruction, simulator, t0)
+function get_bathymetry(solver::VolumeFluxesSolver)
+    gc = ghost_cells(solver.simulator)
+    return @views get_bathymetry(solver.simulator)[gc+1:end-gc]
+end
 
-    SinFVM.simulate_to_time(simulator, problem.T; callback=callback)
+@views function update_bathymetry!(simulator, problem, β)
+    gc = ghost_cells(simulator)
+    b = get_bathymetry(simulator)
+    b[gc+1:end-gc] .= problem.initial_bathymetry .+ β
+    update_bc!(b, gc)
+end
 
-    x = SinFVM.cell_faces(problem._grid)
+function set_initial_state!(simulator, problem, β)
+    U0 = problem.U0.U
+    U0_volume_fluxes = VolumeFluxes.current_interior_state(simulator)
+    for i in eachindex(U0)
+        β_i = 0.5 * (β[i] + β[i+1])
+        U0_volume_fluxes[i] = U0[i] + State(β_i, 0)
+    end
+    VolumeFluxes.update_bc!(simulator, VolumeFluxes.current_state(simulator))
+end
+    
+
+function reset_simulator!(simulator, problem, β)
+    update_bathymetry!(simulator, problem, β)
+    set_initial_state!(simulator, problem, β)
+end
+
+function solve_primal(solver::VolumeFluxesSolver, β)
+    reset_simulator!(solver.simulator, solver.problem, β)
+    
+    t0 = zero(eltype(β))
+    callback, U, t = recording_callback(solver, t0)
+
+    VolumeFluxes.simulate_to_time(solver.simulator, solver.problem.T; callback=callback)
+
+    x = VolumeFluxes.cell_faces(solver.simulator.system.grid)
     return U, t, x
 end
 
-function solve_primal(problem::SinFVMPrimalSWEProblem, β, callback)
-    simulator = _create_simulator(problem, β)
-
-    SinFVM.simulate_to_time(simulator, problem.T; callback=callback)
+function solve_primal(solver::VolumeFluxesSolver, β, callback)
+    reset_simulator!(solver.simulator, solver.problem, β)
+    VolumeFluxes.simulate_to_time(solver.simulator, solver.problem.T; callback=callback)
 end
 
-function compute_Δx(problem::SinFVMPrimalSWEProblem)
-    return SinFVM.compute_dx(problem._grid)
+function compute_Δx(solver::VolumeFluxesSolver)
+    return VolumeFluxes.compute_dx(solver.simulator.system.grid)
 end
 
-function initial_state(problem::SinFVMPrimalSWEProblem)
-    return problem.u0
+function initial_state(solver::VolumeFluxesSolver)
+    return solver.problem.U0
 end
 
-using SinFVM: for_each_cell, B_cell, B_face_left, B_face_right, minmod_slope, AllPracticalSWE, for_each_inner_cell
-import SinFVM: reconstruct!
+using VolumeFluxes: for_each_cell, B_cell, B_face_left, B_face_right, minmod_slope, AllPracticalSWE, for_each_inner_cell
+import VolumeFluxes: reconstruct!
 
 """
     BathymetryHandlingReconstruction()
-A linear reconstruction similar to SinFVM.LinearReconstruction, but caps heights and momentum to zero instead of adjusting the slope.
+A linear reconstruction similar to VolumeFluxes.LinearReconstruction, but caps heights and momentum to zero instead of adjusting the slope.
 """
-struct BathymetryHandlingReconstruction <: SinFVM.Reconstruction end
+struct BathymetryHandlingReconstruction <: VolumeFluxes.Reconstruction end
 
 function convert_to_depth(U, b, ε)
     h, p = U
@@ -219,7 +266,7 @@ function reconstruct_cell(Ul, Uc, Ur, B_left, B_right, ε, compute_slope)
     return convert_to_depth(U_left, B_left, ε), convert_to_depth(U_right, B_right, ε)
 end
 
-function SinFVM.reconstruct!(backend, ::BathymetryHandlingReconstruction, output_left, output_right, input_conserved, grid::SinFVM.Grid, eq::AllPracticalSWE, direction)
+function VolumeFluxes.reconstruct!(backend, ::BathymetryHandlingReconstruction, output_left, output_right, input_conserved, grid::VolumeFluxes.Grid, eq::AllPracticalSWE, direction)
     @assert grid.ghostcells[1] > 1
 
     compute_slope = (Ul, Uc, Ur) -> minmod_slope(Ul, Uc, Ur, 1.)
@@ -234,19 +281,19 @@ function SinFVM.reconstruct!(backend, ::BathymetryHandlingReconstruction, output
     return nothing
 end
 
-using SinFVM: SourceTerm, ConservedSystem, Direction, compute_dx
-import SinFVM: evaluate_directional_source_term!
+using VolumeFluxes: SourceTerm, ConservedSystem, Direction, compute_dx
+import VolumeFluxes: evaluate_directional_source_term!
 
 
 """
     DryFrontTerm()
 
-A bottom topography source term corresponding to `BathymetryHandlingReconstruction`. Similar to the one used in SinFVM,
+A bottom topography source term corresponding to `BathymetryHandlingReconstruction`. Similar to the one used in VolumeFluxes,
 except that it balances the fluxes also at dry fronts, where the water height goes to zero.
 """
 struct DryFrontTerm <: SourceTerm end
 
-function SinFVM.evaluate_directional_source_term!(::DryFrontTerm, output, current_state, cs::ConservedSystem, dir::Direction)
+function VolumeFluxes.evaluate_directional_source_term!(::DryFrontTerm, output, current_state, cs::ConservedSystem, dir::Direction)
     # {right, left}_buffer is (h, hu)
     # output and current_state is (w, hu)
     dx = compute_dx(cs.grid, dir)

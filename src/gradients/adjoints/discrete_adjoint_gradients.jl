@@ -5,7 +5,7 @@ using ..OptimalBath: extrapolate_β_to_full_domain, initial_state
 import ..OptimalBath: compute_objective_and_gradient!, compute_gradient!, adjoint_solver
 
 using ForwardDiff: derivative
-using SinFVM: XDIR
+using VolumeFluxes: XDIR
 
 include("discrete_adjoint_swe.jl")
 
@@ -13,7 +13,7 @@ export DiscreteAdjointGradient
 
 struct DiscreteAdjointGradient <: AdjointGradient end
 
-function adjoint_solver(primal_swe_problem::PrimalSWEProblem{NoReconstruction, ForwardEuler}, ::DiscreteAdjointGradient)
+function adjoint_solver(primal_swe_problem::PrimalSWESolver{NoReconstruction, ForwardEuler, BS}, ::DiscreteAdjointGradient) where BS
     return DiscreteAdjointSWE(primal_swe_problem)
 end
 

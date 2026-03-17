@@ -22,9 +22,11 @@ function tangent_linear_model(N, U0, δU0, bathymetry)
     function f(U)
         β = zeros(eltype(eltype(U)), N+1)
         U = States{Average, Elevation}(unflatten(U))
-        problem = SinFVMPrimalSWEProblem(N, U, 0.1, reconstruction=NoReconstruction(), timestepper=ForwardEuler(); initial_bathymetry=bathymetry)
-        U, t, x = solve_primal(problem, β)
-        return U, t, x, problem
+        problem = PrimalSWEProblem(N, U, 0.1, initial_bathymetry=bathymetry)
+
+        solver = VolumeFluxesSolver(problem, SolverOptions(), eltype(eltype(U.U)))
+        U, t, x = solve_primal(solver, β)
+        return U, t, x, solver
     end
     function g(U)
         return flatten(f(U)[1].U)
@@ -32,10 +34,10 @@ function tangent_linear_model(N, U0, δU0, bathymetry)
 
     J_flat = ForwardDiff.jacobian(g, flatten(U0))
 
-    U, t, x, problem = f(flatten(U0))
+    U, t, x, solver = f(flatten(U0))
 
     δU = unflatten(J_flat * flatten(δU0), N)
-    return U, δU, t, problem
+    return U, δU, t, solver
 end
 
 using LinearAlgebra: dot
@@ -43,7 +45,7 @@ function adjoint_dot_test(N, bathymetry)
     U0 = rand(State{Float64}, N)
     U0 = States{Average, Elevation}(U0)
     δU0 = rand(State{Float64}, N)
-    U, δU, t, problem = tangent_linear_model(N, U0.U, δU0, bathymetry)
+    U, δU, t, solver = tangent_linear_model(N, U0.U, δU0, bathymetry)
 
     U = unsafe_to_depth!(U, bathymetry)
     β = zeros(N+1)
@@ -52,7 +54,7 @@ function adjoint_dot_test(N, bathymetry)
     Λ0 = rand(State{Float64}, N)
     Δx = 1/N
 
-    Λ = solve_adjoint(Λ0, U, objectives, bathymetry, t, Δx, DiscreteAdjointSWE(problem))
+    Λ = solve_adjoint(Λ0, U, objectives, bathymetry, t, Δx, DiscreteAdjointSWE(solver))
 
     adjoint_dot_product_test = dot(δU[:, end], Λ0)
     @test adjoint_dot_product_test ≈ dot(δU0, Λ[:, 1])
@@ -83,14 +85,14 @@ function general_adjoint_dot_test(N, bathymetry)
     U0 = rand(State{Float64}, N)
     β = zeros(N+1)
     δU0 = rand(State{Float64}, N)
-    U, δU, t, problem = tangent_linear_model(N, U0, δU0, bathymetry)
+    U, δU, t, solver = tangent_linear_model(N, U0, δU0, bathymetry)
 
     U = unsafe_to_depth!(U, bathymetry)
     β = zeros(N+1)
     objectives = Objectives(interior_objective=KineticEnergy())
     Λ0 = rand(State{Float64}, N)
     Δx = 1/N
-    Λ = solve_adjoint(Λ0, U, objectives, bathymetry, t, Δx, DiscreteAdjointSWE(problem))
+    Λ = solve_adjoint(Λ0, U, objectives, bathymetry, t, Δx, DiscreteAdjointSWE(solver))
 
     adjoint_dot_product_test = dot(δU[:, 1], Λ[:, 1])
 
@@ -108,16 +110,16 @@ function compare_to_ad(N, initial_bathymetry, β)
     U0 = rand(State{Float64}, N)
     U0 = States{Average, Elevation}(U0)
 
-    problem = SinFVMPrimalSWEProblem(N, U0, 0.1, reconstruction=NoReconstruction(), timestepper=ForwardEuler(); initial_bathymetry=initial_bathymetry)
+    problem = PrimalSWEProblem(N, U0, 0.1, initial_bathymetry=initial_bathymetry)
+    spec = SolverSpec(problem, VolumeFluxesBackend())
     objectives = Objectives(
         interior_objective=KineticEnergy(),
         terminal_objective=KineticEnergy(),
     )
     forward_ad = ForwardADGradient(β)
     discrete_adjoint = DiscreteAdjointGradient()
-    da_objective, da_gradient = compute_objective_and_gradient(β, problem, objectives, discrete_adjoint)
-    forward_ad_objective, forward_ad_gradient = compute_objective_and_gradient(β, problem, objectives, forward_ad)
-
+    da_objective, da_gradient = compute_objective_and_gradient(β, spec, objectives, discrete_adjoint)
+    forward_ad_objective, forward_ad_gradient = compute_objective_and_gradient(β, spec, objectives, forward_ad)
     @test da_objective ≈ forward_ad_objective
     @test forward_ad_gradient ≈ da_gradient
 end
