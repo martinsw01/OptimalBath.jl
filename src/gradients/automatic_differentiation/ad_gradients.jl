@@ -34,8 +34,6 @@ function to_real(x)
     return x.value
 end
 
-const NoReconstructionSolverSpec{P<:PrimalSWEProblem, B<:SolverBackend, TS<:TimeStepper, BS<:BathymetrySourceTerm} = SolverSpec{P, B, SolverOptions{NoReconstruction, TS, BS}}
-
 # Automatic differentiation requires the solver to be constructed inside the AD framework, so we can only accept SolverSpecs.
 function compute_objective_and_gradient!(G, β, p::PrimalSWESolver, o::Objectives, ad::ADGradient)
     @error "compute_objective_and_gradient! with ADGradient requires a SolverSpec, but got a PrimalSWESolver."
