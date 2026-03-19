@@ -60,7 +60,7 @@ function adjoint_dot_test(N, bathymetry)
     @test adjoint_dot_product_test ≈ dot(δU0, Λ[:, 1])
 end
 
-function compute_perturbation_with_nonzero_objective(Λ, U, δU, Δx, t, objectives)
+function compute_perturbation_with_nonzero_objective(Λ, U, δU, Δx, t, objectives, da)
     U = U.U
     N, M = size(U)
     Λ_temp = similar(U, N)
@@ -74,7 +74,7 @@ function compute_perturbation_with_nonzero_objective(Λ, U, δU, Δx, t, objecti
         Λ_temp .= Ref(zero(eltype(U)))
         OptimalBath.add_objective_source!(Λ_temp, U[:, n-1], Δt, Δx, objectives)
         if n < M
-            OptimalBath.DiscreteAdjoints.add_objective_timestep_source!(Λ_temp, U[:, n-1], J_final, Δx, 0.25, objectives)
+            OptimalBath.DiscreteAdjoints.add_objective_timestep_source!(Λ_temp, U[:, n-1], J_final, Δx, 0.25, objectives, da)
         end
         δJ += dot(δU[:, n-1], Λ_temp)
     end
@@ -92,11 +92,12 @@ function general_adjoint_dot_test(N, bathymetry)
     objectives = Objectives(interior_objective=KineticEnergy())
     Λ0 = rand(State{Float64}, N)
     Δx = 1/N
-    Λ = solve_adjoint(Λ0, U, objectives, bathymetry, t, Δx, DiscreteAdjointSWE(solver))
+    da = DiscreteAdjointSWE(solver)
+    Λ = solve_adjoint(Λ0, U, objectives, bathymetry, t, Δx, da)
 
     adjoint_dot_product_test = dot(δU[:, 1], Λ[:, 1])
 
-    @test adjoint_dot_product_test ≈ compute_perturbation_with_nonzero_objective(Λ, U, δU, Δx, t, objectives)
+    @test adjoint_dot_product_test ≈ compute_perturbation_with_nonzero_objective(Λ, U, δU, Δx, t, objectives, da)
 end
 
 @testset "Adjoint dot product test" begin
