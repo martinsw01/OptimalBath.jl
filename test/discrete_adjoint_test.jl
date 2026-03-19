@@ -40,7 +40,10 @@ function tangent_linear_model(N, U0, δU0, bathymetry)
     return U, δU, t, solver
 end
 
-using LinearAlgebra: dot
+function dot(a, b)
+    return a' * b
+end
+
 function adjoint_dot_test(N, bathymetry)
     U0 = rand(State{Float64}, N)
     U0 = States{Average, Elevation}(U0)
