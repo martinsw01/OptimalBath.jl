@@ -53,6 +53,14 @@ struct VolumeFluxesSolver{Simulator, Problem, R, TS, BS, FloatType} <: PrimalSWE
     end
 end
 
+function desingularize(h, solver::VolumeFluxesSolver)
+    return VolumeFluxes.desingularize(solver.simulator.system.equation, h)
+end
+
+function desingularize(h, p, solver::VolumeFluxesSolver)
+    return VolumeFluxes.desingularize(solver.simulator.system.equation, h, p)
+end
+
 function create_grid(problem, reconstruction)
     return _create_grid(problem.N, problem.domain, reconstruction)
 end

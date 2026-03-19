@@ -1,4 +1,8 @@
-export State, height, momentum, States, ValueType, Left, Average, Right, HeightReference, Depth, Elevation, to_depth!, unsafe_to_depth!, to_depth, AverageDepthStates
+export State, height, momentum, States, AverageDepthStates, AverageElevationStates
+export ValueType, Left, Average, Right
+export HeightReference, Depth, Elevation
+export to_depth!, unsafe_to_depth!, to_depth
+export to_elevation!, unsafe_to_elevation!, to_elevation
 
 using StaticArrays
 
@@ -64,6 +68,15 @@ function compute_new_depth(U, bl::T, br::T) where {T}
     compute_new_depth(U, 0.5 * (bl + br))
 end
 
+function compute_new_height(U, b)
+    h_depth, p = U
+    return State(h_depth + b, p)
+end
+
+function compute_new_height(U, bl, br)
+    compute_new_height(U, 0.5 * (bl + br))
+end
+
 function to_depth!(U::States{Average, Depth, T, N, A},
                    V::States{Average, Elevation, TT, N, AA},
                    b::AbstractArray{TTT}) where {T, N, A, TT, AA, TTT}
@@ -80,6 +93,30 @@ function to_depth(U::States{VT, Elevation, T, N, A}, b::AbstractArray{TT}) where
     U_depth = States{VT, Depth}(similar(U.U, State{promote_type(T, TT)}))
     to_depth!(U_depth, U, b)
     return U_depth
+end
+
+function to_elevation(U::States{VT, Depth, T, N, A}, b::AbstractArray{TT}) where {VT, T, N, A, TT}
+    U_elevation = similar(U, Elevation, VT, promote_type(T, TT))
+    to_elevation!(U_elevation, U, b)
+    return U_elevation
+end
+
+function to_elevation!(U::States{Average, Elevation, T, N, A},
+                         V::States{Average, Depth, TT, N, AA},
+                         b::AbstractArray{TTT}) where {T, N, A, TT, AA, TTT}
+    U.U .= compute_new_height.(V.U, side(b, Left), side(b, Right))
+end
+
+function to_elevation!(U::States{S, Elevation, T, N, A},
+                         V::States{S, Depth, TT, N, AA},
+                         b::AbstractArray{TTT}) where {S, T, N, A, TT, AA, TTT}
+    U.U .= compute_new_height.(V.U, side(b, S))
+end
+
+function unsafe_to_elevation!(U::States{S, Depth, T, N, A}, b) where {S, T, N, A}
+    V = States{S, Elevation}(U.U)
+    to_elevation!(V, U, b)
+    return V
 end
 
 function adjust_to_bathymetry_changes!(U::States{Average, HR, T, N, A},

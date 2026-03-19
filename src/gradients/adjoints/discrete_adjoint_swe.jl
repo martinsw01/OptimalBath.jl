@@ -1,6 +1,6 @@
 export DiscreteAdjointSWE, TestDiscreteAdjoint, StepWiseTestDiscreteAdjoint
 
-using ForwardDiff: jacobian
+using ForwardDiff: jacobian, gradient
 using VolumeFluxes: CentralUpwind, ShallowWaterEquations1D, XDIR
 using StaticArrays: @SMatrix, SMatrix
 
@@ -12,8 +12,8 @@ const _numerical_flux = CentralUpwind(ShallowWaterEquations1D())
 
 abstract type Adjoint end
 
-struct DiscreteAdjointSWE <: AdjointSWE
-    primal::VolumeFluxesSolver
+struct DiscreteAdjointSWE{PrimalSolver<:VolumeFluxesSolver} <: AdjointSWE
+    primal::PrimalSolver
 end
 
 function flux_left_grad_center(Ul, Uc)
@@ -57,39 +57,46 @@ function time_step_source(Λ, U_next, U_prev, wave_speed, CFL, Δx, Δt, ∂a∂
     end / Δt
 end
 
-function compute_max_abs_eigval(U::State)
+function desingularize(h, da::DiscreteAdjointSWE)
+    return OptimalBath.desingularize(h, da.primal)
+end
+
+function desingularize(h, p, da::DiscreteAdjointSWE)
+    return OptimalBath.desingularize(h, p, da.primal)
+end
+
+function compute_max_abs_eigval(U::State, da::DiscreteAdjointSWE)
     h, p = U
-    u = p / h
+    u = desingularize(h, p, da)
     c = sqrt(9.81*h)
     return abs(u) + abs(c)
 end
 
-function determine_time_step_index(U)
-    findmax(compute_max_abs_eigval, U)
+function determine_time_step_index(U, da::DiscreteAdjointSWE)
+    findmax(U) do U_j
+        return compute_max_abs_eigval(U_j, da)
+    end
 end
 
-# Gradient of eigenvalue wrt U
-function eigval_gradient(U::State)
-    h, p = U
-    p_sgn = sign(p)
-    ∂a∂h = -p_sgn * p/h^2 + 0.5 * sqrt(9.81/h)
-    ∂a∂p = p_sgn / h
-    return State(∂a∂h, ∂a∂p)
+function eigval_gradient(U::State, da::DiscreteAdjointSWE)
+    return gradient(U) do U
+        compute_max_abs_eigval(U, da)
+    end
 end
 
 function compute_timestep_correction(Λ_next, U_prev, U_next, Δt)
     return Λ_next' * (U_next - U_prev) / Δt
 end
 
-function compute_timestep_gradient(CFL, Δx, Ui, wave_speed)
-    ∂a∂U = eigval_gradient(Ui)
+function compute_timestep_gradient(CFL, Δx, Ui, wave_speed, da::DiscreteAdjointSWE)
+    ∂a∂U = eigval_gradient(Ui, da)
     τ = - CFL * Δx / wave_speed^2 * ∂a∂U
     return τ
 end
 
-function compute_timestep_source(Λ_next, U_next, U_prev, μ_final, J_final, Δt, Δx, CFL, objectives)
-    wave_speed, i = determine_time_step_index(U_prev)
-    τ = compute_timestep_gradient(CFL, Δx, U_prev[i], wave_speed)
+function compute_timestep_source(Λ_next, U_next, U_prev, μ_final, J_final, Δt, Δx, CFL, objectives, da::DiscreteAdjointSWE)
+    wave_speed, i = determine_time_step_index(U_prev, da)
+    τ = compute_timestep_gradient(CFL, Δx, U_prev[i], wave_speed, da)
     μ_step = compute_timestep_correction(Λ_next, U_prev, U_next, Δt)
     J_step = compute_objective_step(U_prev, Δx, objectives)
     Δμ = μ_step - μ_final
@@ -97,15 +104,15 @@ function compute_timestep_source(Λ_next, U_next, U_prev, μ_final, J_final, Δt
     return i, (Δμ + ΔJ) * τ
 end
 
-function add_timestep_source!(Λ_prev, Λ_next, U_next, U_prev, μ_final, J_final, Δt, Δx, CFL, objectives)
-    i, source = compute_timestep_source(Λ_next, U_next, U_prev, μ_final, J_final, Δt, Δx, CFL, objectives)
+function add_timestep_source!(Λ_prev, Λ_next, U_next, U_prev, μ_final, J_final, Δt, Δx, CFL, objectives, da::DiscreteAdjointSWE)
+    i, source = compute_timestep_source(Λ_next, U_next, U_prev, μ_final, J_final, Δt, Δx, CFL, objectives, da)
     Λ_prev[i] += source
 end
 
 # Only used for the adjoint dot product test
-function add_objective_timestep_source!(Λ_prev, U_prev, J_final, Δx, CFL, objectives)
-    wave_speed, i = determine_time_step_index(U_prev)
-    τ = compute_timestep_gradient(CFL, Δx, U_prev[i], wave_speed)
+function add_objective_timestep_source!(Λ_prev, U_prev, J_final, Δx, CFL, objectives, da::DiscreteAdjointSWE)
+    wave_speed, i = determine_time_step_index(U_prev, da)
+    τ = compute_timestep_gradient(CFL, Δx, U_prev[i], wave_speed, da)
     J_step = compute_objective_step(U_prev, Δx, objectives)
     ΔJ = J_step - J_final
     Λ_prev[i] += ΔJ * τ
@@ -197,7 +204,7 @@ end
         add_objective_source!(Λ[:, n-1], U[:, n-1], Δt, Δx, objectives, da)
         add_bottom_source!(Λ, n, t, Δx, b, da)
         if n < M
-            add_timestep_source!(Λ[:, n-1], Λ[:, n], U[:, n], U[:, n-1], μ_final, J_final, Δt, Δx, 0.25, objectives)
+            add_timestep_source!(Λ[:, n-1], Λ[:, n], U[:, n], U[:, n-1], μ_final, J_final, Δt, Δx, 0.25, objectives, da)
         end
     end
     return Λ

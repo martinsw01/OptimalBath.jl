@@ -42,7 +42,7 @@ function compute_objective_and_gradient!(G, β, p::PrimalSWESolver, o::Objective
     throw(MethodError(compute_objective_and_gradient!, (G, β, p, o, ad)))
 end
 
-function compute_objective_and_gradient!(G, β, spec::NoReconstructionSolverSpec, objectives::Objectives, ad::ADGradient)
+function compute_objective_and_gradient!(G, β, spec::SolverSpec, objectives::Objectives, ad::ADGradient)
     function solve_and_compute_objective(β)
         db = extrapolate_β_to_full_domain(β, objectives.design_indices, length(spec.problem.initial_bathymetry))
         objective = objectives.regularization(β)
