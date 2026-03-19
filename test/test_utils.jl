@@ -1,54 +1,74 @@
 using OptimalBath: GradientType, PrimalSWEProblem
-import OptimalBath: solve_primal, compute_Δx, create_callback, initial_state
+import OptimalBath: solve_primal, compute_Δx, create_callback, initial_state, build_solver, get_bathymetry
 using StaticArrays, Test
 
-struct PrimalSWETestProblem <: PrimalSWEProblem
-    initial_bathymetry::Vector{Float64}
-    function PrimalSWETestProblem(N)
-        initial_bathymetry = zeros(Float64, N + 1)
-        return new(initial_bathymetry)
+struct MockBackend <: SolverBackend end
+
+function build_solver(spec::SolverSpec{P, MockBackend, SO}, float_type) where {P, SO}
+    return MockSolver(spec.problem.N, spec.solver_options.reconstruction, float_type)
+end
+
+struct MockSolver{R<:Reconstruction} <: PrimalSWESolver{R, ForwardEuler, DefaultBathymetrySource}
+    initial_bathymetry
+    function MockSolver(N, r=NoReconstruction(), float_type=Float64)
+        initial_bathymetry = zeros(float_type, N + 1)
+        return new{typeof(r)}(initial_bathymetry)
     end
 end
 
-function compute_Δx(problem::PrimalSWETestProblem)
-    N = length(problem.initial_bathymetry) - 1
+function compute_Δx(solver::MockSolver)
+    N = length(solver.initial_bathymetry) - 1
     return 1 / N
 end
 
-function create_callback(f, ::PrimalSWETestProblem)
+function create_callback(f, ::MockSolver)
     return f
 end
 
-function initial_state(problem::PrimalSWETestProblem)
-    N = length(problem.initial_bathymetry) - 1
-    h = first(problem.initial_bathymetry) + 1
+function get_bathymetry(solver::MockSolver)
+    return solver.initial_bathymetry
+end
+
+function initial_state(bathymetry)
+    N = length(bathymetry) - 1
+    h = first(bathymetry) + 1
     U = State(h, 0.0)
     return States{Average, Elevation}(fill(U, N))
 end
 
-
-function lake_at_rest(bathymetry, N, M)
-    h = first(bathymetry) + 1
-    U = SVector{2, eltype(bathymetry)}(h, 0.0)
-    return fill(U, N, M)
+function initial_state(problem::MockSolver)
+    return initial_state(problem.initial_bathymetry)
 end
 
-function solve_primal(::PrimalSWETestProblem, bathymetry)
-    N = length(bathymetry) - 1
+
+function lake_at_rest(bathymetry)
     M = 20
-    U = lake_at_rest(bathymetry, N, M)
+    N = length(bathymetry) - 1
     t = range(0.0, stop=1.0, length=M)
     x = range(0.0, stop=1.0, length=N+1)
+
+    h = first(bathymetry) + 1
+    U = State(h, 0.0)
+    return fill(U, N, M), t, x
+end
+
+function solve_primal(problem::MockSolver{LinearReconstruction}, δb)
+    U, t, x = lake_at_rest(problem.initial_bathymetry .+ δb)
+    Ul = States{Left, Depth}(U)
+    Ur = States{Right, Depth}(U)
+    return (Ul, Ur), t, x
+end
+
+function solve_primal(problem::MockSolver{NoReconstruction}, δb)
+    U, t, x = lake_at_rest(δb .+ problem.initial_bathymetry)
     return States{Average, Elevation}(U), t, x
 end
 
-function solve_primal(problem::PrimalSWETestProblem, bathymetry, callback)
-    U, t, x = solve_primal(problem, bathymetry)
+function solve_primal(problem::MockSolver, δb, callback)
+    U, t, x = lake_at_rest(problem.initial_bathymetry .+ δb)
     Δt = step(t)
-
-    # callback.(eachcol(U[:,2:end]), t[2:end], Δt)
-    for n in 2:length(t)
-        callback(States{Average, Elevation}(U.U[:, n]), t[n], Δt)
+    for n in 2:lastindex(t)
+        callback(States{Average, Elevation}(U[:, n]), t[n], Δt)
     end
 end
 
@@ -59,12 +79,13 @@ end
     N = 10#rand(10:20)
     bathymetry = zeros(N + 1)
     β = zeros(4)
-    problem = PrimalSWETestProblem(N)
-    Δx = compute_Δx(problem)
+    problem = PrimalSWEProblem(N, initial_state(bathymetry), 1.0)
+    spec = SolverSpec(problem, MockBackend())
+    Δx = 1/N
     objectives = Objectives(design_indices=[1, 2, 5, 8], interior_objective=Mass())
     gradient_type = ForwardADGradient(bathymetry, β)
 
-    objective, gradient = compute_objective_and_gradient(β, problem, objectives, gradient_type)
+    objective, gradient = compute_objective_and_gradient(β, spec, objectives, gradient_type)
 
     @test no_error = true
     
@@ -72,17 +93,17 @@ end
     # @test gradient ≈ [1 + 0.5 * Δx, Δx, Δx, Δx]
 end
 
-@testset "Test AdjointApproachGradient interface" begin
-    using OptimalBath: AdjointApproachGradient, compute_objective_and_gradient, Objectives, Mass
+@testset "Test ContinuousAdjointGradient interface" begin
+    using OptimalBath: ContinuousAdjointGradient, compute_objective_and_gradient
 
     N = 10
     bathymetry = zeros(N + 1)
     β = zeros(4)
-    problem = PrimalSWETestProblem(N)
+    solver = MockSolver(N, LinearReconstruction())
     objectives = Objectives(design_indices=[3, 4, 5, 8], interior_objective=Mass())
-    gradient_type = AdjointApproachGradient(bathymetry)
+    gradient_type = ContinuousAdjointGradient(bathymetry)
 
-    objective, gradient = compute_objective_and_gradient(β, problem, objectives, gradient_type)
+    objective, gradient = compute_objective_and_gradient(β, solver, objectives, gradient_type)
     
     @test objective ≈ 1
     @test gradient ≈ [0, 0, 0, 0]

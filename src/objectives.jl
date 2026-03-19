@@ -1,4 +1,7 @@
+export Energy, KineticEnergy, SquaredMomentum, Mass, NoObjective
+
 struct Energy <: Objective end
+struct KineticEnergy <: Objective end
 struct SquaredMomentum <: Objective end
 struct Mass <: Objective end
 struct NoObjective <: Objective end
@@ -15,12 +18,23 @@ function objective_density(::Energy, U)
     return 0.5 * (U[2]^2 / U[1] + 9.81 * U[1]^2)
 end
 
+function objective_density(::KineticEnergy, (h, hu))
+    u = desingularize(h, hu)
+    return 0.5 * hu * u
+end
+
+function objective_density_gradient(::KineticEnergy, (h, hu))
+    u = desingularize(h, hu)
+    SVector(-0.5 * u^2, u)
+end
+
 function objective_density(::SquaredMomentum, U)
     return U[2]^2
 end
 
 function objective_density(::Mass, U)
     return U[1]
+    # return U[1]^2
 end
 
 function objective_density(::NoObjective, U)
@@ -29,7 +43,7 @@ end
 
 
 function objective_density_gradient(obj::Objective, U::States{S, Depth, T, N, A}, I...) where {S, T, N, A}
-    return objective_density_gradient.(obj, U.U[I...])
+    return objective_density_gradient.(obj, @view U.U[I...])
 end
 
 function objective_density_gradient(obj::Objective, U)
@@ -38,21 +52,28 @@ function objective_density_gradient(obj::Objective, U)
     end
 end
 
+function objective_increment(objectives, U, n, Δt, Δx, ::Type{ForwardEuler})
+    interior_objective = objectives.interior_objective
+    objective_indices = objectives.objective_indices
+    return sum(objective_density(interior_objective, U, objective_indices, n)) * Δt * Δx
+end
 
+function objective_increment(objectives, U, n, Δt, Δx, ::Type{RK2})
+    interior_objective = objectives.interior_objective
+    objective_indices = objectives.objective_indices
+    return 0.5 * sum(objective_density(interior_objective, U, objective_indices, n:n+1)) * Δt * Δx
+end
 
-@views function compute_objective(U::States{S, Depth, T, D, A}, t, x, β, objectives::Objectives) where {S, T, D, A}
+function _compute_objective(U::States, t, x, β, objectives, timestepper)
     N, M = size(U.U)
     @assert (N, M) == (length(x)-1, length(t))
     Δx = x[2] - x[1]
 
     interior_integral = objectives.regularization(β)
-    for n in eachindex(t)[1:end-1]
+    for n in 1:lastindex(t)-1
         Δt = t[n+1] - t[n]
 
-        interior_integral += 0.5 * sum(objective_density(objectives.interior_objective,
-                                                         U,
-                                                         objectives.objective_indices,
-                                                         n:n+1)) * Δt * Δx
+        interior_integral += objective_increment(objectives, U, n, Δt, Δx, timestepper)
     end
 
     terminal_integral = sum(objective_density(objectives.terminal_objective,
@@ -61,4 +82,21 @@ end
                                               M)) * Δx
 
     return interior_integral + terminal_integral
+end
+
+function compute_objective(U::States{S, Depth, T, D, A}, t, x, β, objectives::Objectives, timestepper::Type{<:TimeStepper}) where {S, T, D, A}
+    return _compute_objective(U, t, x, β, objectives, timestepper)
+end
+
+function compute_objective(U::States{S, Depth, T, D, A}, t, x, β, objectives::Objectives, timestepper::TimeStepper) where {S, T, D, A}
+    return compute_objective(U, t, x, β, objectives, typeof(timestepper))
+end
+
+function compute_objective(Ul::States{Left, Depth, T, D, A}, Ur::States{Right, Depth, T, D, A}, t, x, β, objectives::Objectives, timestepper::Type{<:TimeStepper}) where {T, D, A}
+    return 0.5 * (_compute_objective(Ul, t, x, β, objectives, timestepper) +
+                  _compute_objective(Ur, t, x, β, objectives, timestepper))
+end
+
+function compute_objective(Ul::States{Left, Depth, T, D, A}, Ur::States{Right, Depth, T, D, A}, t, x, β, objectives::Objectives, timestepper::TimeStepper) where {T, D, A}
+    return compute_objective(Ul, Ur, t, x, β, objectives, typeof(timestepper))
 end

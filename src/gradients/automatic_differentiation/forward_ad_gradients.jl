@@ -1,3 +1,5 @@
+export ForwardADGradient
+
 using ForwardDiff, DiffResults, PreallocationTools
 
 """

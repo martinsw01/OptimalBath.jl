@@ -11,10 +11,10 @@ using StaticArrays
     U = rand(SVector{2, Float64}, N, M)
     U = States{Average, Depth}(U)
     Λ0 = fill(SVector{2}(0., 0.), N)
-    dJdU = zero.(U.U)
+    objectives = Objectives()
 
     Λ_expected = fill(SVector{2}(0., 0.), size(U.U))
-    Λ = OptimalBath.solve_adjoint(Λ0, U, dJdU, b, t, Δx)
+    Λ = OptimalBath.solve_adjoint(Λ0, U, objectives, b, t, Δx, ContinuousAdjointSWE())
 
     @test Λ == Λ_expected
 end
@@ -35,10 +35,10 @@ end
     U = rand(SVector{2, Float64}, N, M)
     U = States{Average, Depth}(U)
     Λ0 = fill(SVector{2}(λ1, λ2), N)
-    dJdU = zero.(U.U)
+    objectives = Objectives()
 
     Λ_expected = fill(SVector{2}(λ1, λ2), size(U.U))
-    Λ = OptimalBath.solve_adjoint(Λ0, U, dJdU, b, t, Δx)
+    Λ = OptimalBath.solve_adjoint(Λ0, U, objectives, b, t, Δx, ContinuousAdjointSWE())
 
     @test Λ ≈ Λ_expected
 end
