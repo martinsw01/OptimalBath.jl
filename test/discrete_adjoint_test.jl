@@ -40,13 +40,20 @@ function tangent_linear_model(N, U0, δU0, bathymetry)
     return U, δU, t, solver
 end
 
+function display_jacobians(J, N)
+    for i in 1:2N:size(J, 1)-2N
+        J_prev_inv = inv(J[i:i+2N-1, :])
+        J_next = J[i+2N:i+4N-1, :]
+        display((J_prev_inv * J_next)')
+    end
+end
+
 function dot(a, b)
     return a' * b
 end
 
-function adjoint_dot_test(N, bathymetry)
-    U0 = rand(State{Float64}, N)
-    U0 = States{Average, Elevation}(U0)
+function adjoint_dot_test(N, compute_U0, bathymetry)
+    U0 = compute_U0(N)
     δU0 = rand(State{Float64}, N)
     U, δU, t, solver = tangent_linear_model(N, U0.U, δU0, bathymetry)
 
@@ -74,7 +81,7 @@ function compute_perturbation_with_nonzero_objective(Λ, U, δU, Δx, t, objecti
 
     for n in 2:M
         Δt = t[n] - t[n-1]
-        Λ_temp .= Ref(zero(eltype(U)))
+        fill!(Λ_temp, zero(eltype(U)))
         OptimalBath.add_objective_source!(Λ_temp, U[:, n-1], Δt, Δx, objectives)
         if n < M
             OptimalBath.DiscreteAdjoints.add_objective_timestep_source!(Λ_temp, U[:, n-1], J_final, Δx, 0.25, objectives, da)
@@ -84,11 +91,11 @@ function compute_perturbation_with_nonzero_objective(Λ, U, δU, Δx, t, objecti
     return δJ
 end
 
-function general_adjoint_dot_test(N, bathymetry)
-    U0 = rand(State{Float64}, N)
+function general_adjoint_dot_test(N, compute_U0, bathymetry)
+    U0 = compute_U0(N)
     β = zeros(N+1)
     δU0 = rand(State{Float64}, N)
-    U, δU, t, solver = tangent_linear_model(N, U0, δU0, bathymetry)
+    U, δU, t, solver = tangent_linear_model(N, U0.U, δU0, bathymetry)
 
     U = unsafe_to_depth!(U, bathymetry)
     β = zeros(N+1)
@@ -103,16 +110,9 @@ function general_adjoint_dot_test(N, bathymetry)
     @test adjoint_dot_product_test ≈ compute_perturbation_with_nonzero_objective(Λ, U, δU, Δx, t, objectives, da)
 end
 
-@testset "Adjoint dot product test" begin
-    adjoint_dot_test(8, zeros(9))
-    adjoint_dot_test(8, -rand(9))
-    general_adjoint_dot_test(8, zeros(9))
-    general_adjoint_dot_test(8, -rand(9))
-end
 
-function compare_to_ad(N, initial_bathymetry, β)
-    U0 = rand(State{Float64}, N)
-    U0 = States{Average, Elevation}(U0)
+function compare_to_ad(N, compute_U0, initial_bathymetry, β)
+    U0 = compute_U0(N)
 
     problem = PrimalSWEProblem(N, U0, 0.1, initial_bathymetry=initial_bathymetry)
     spec = SolverSpec(problem, VolumeFluxesBackend())
@@ -128,8 +128,50 @@ function compare_to_ad(N, initial_bathymetry, β)
     @test forward_ad_gradient ≈ da_gradient
 end
 
+function random_U0(N)
+    U0 = rand(State{Float64}, N)
+    return States{Average, Elevation}(U0)
+end
+
+function post_proc_affected_U0(N)
+    U0 = fill(State(0.2, 1.), N)
+    U0[1] = State(0.01, 1.)
+    U0[4] = State(0.5e-5, 0.)
+    U0[6] = State(0., 0.)
+    return States{Average, Elevation}(U0)
+end
+
+@testset "Adjoint dot product test" begin
+    @testset "Zero bathymetry" begin
+        adjoint_dot_test(8, random_U0, zeros(9))
+    end
+    @testset "Random bathymetry" begin
+        adjoint_dot_test(8, random_U0, -rand(9))
+    end
+    @testset "With objective, zero bathymetry" begin
+        general_adjoint_dot_test(8, random_U0, zeros(9))
+    end
+    @testset "With objective, random bathymetry" begin
+        general_adjoint_dot_test(8, random_U0, -rand(9))
+    end
+end
+
 @testset "Compare to AD" begin
     N = 10
-    compare_to_ad(N, zeros(N+1), zeros(N+1))
-    compare_to_ad(N, -rand(N+1), rand(N+1))
+    @testset "Zero bathymetry" begin
+        compare_to_ad(N, random_U0, zeros(N+1), zeros(N+1))
+    end
+    @testset "Random bathymetry" begin
+        compare_to_ad(N, random_U0, -rand(N+1), rand(N+1))
+    end
+end
+
+@testset "Test post-processing step" begin
+    N = 8
+    @testset "Adjoint consistency" begin
+        adjoint_dot_test(N, post_proc_affected_U0, zeros(N+1))
+    end
+    @testset "Compare to AD" begin
+        compare_to_ad(N, post_proc_affected_U0, zeros(N+1), zeros(N+1))
+    end
 end

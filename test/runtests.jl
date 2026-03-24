@@ -35,7 +35,7 @@ using Test
         include("reconstruction_test.jl")
     end
 
-    @testset "Discrete adjoint tests" begin
+    @testset "Discrete adjoint consistency tests" begin
         include("discrete_adjoint_test.jl")
     end
 end

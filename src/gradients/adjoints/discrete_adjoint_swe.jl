@@ -65,11 +65,19 @@ function desingularize(h, p, da::DiscreteAdjointSWE)
     return OptimalBath.desingularize(h, p, da.primal)
 end
 
+function depth_cutoff(primal_solver)
+    return primal_solver.simulator.system.equation.depth_cutoff
+end
+
 function compute_max_abs_eigval(U::State, da::DiscreteAdjointSWE)
     h, p = U
-    u = desingularize(h, p, da)
-    c = sqrt(9.81*h)
-    return abs(u) + abs(c)
+    if h < depth_cutoff(da.primal)
+        return zero(h)
+    else
+        u = desingularize(h, p, da)
+        c = sqrt(9.81*h)
+        return abs(u) + abs(c)
+    end
 end
 
 function determine_time_step_index(U, da::DiscreteAdjointSWE)
@@ -78,20 +86,15 @@ function determine_time_step_index(U, da::DiscreteAdjointSWE)
     end
 end
 
-function eigval_gradient(U::State, da::DiscreteAdjointSWE)
-    return gradient(U) do U
-        compute_max_abs_eigval(U, da)
-    end
-end
-
 function compute_timestep_correction(Λ_next, U_prev, U_next, Δt)
     return Λ_next' * (U_next - U_prev) / Δt
 end
 
 function compute_timestep_gradient(CFL, Δx, Ui, wave_speed, da::DiscreteAdjointSWE)
-    ∂a∂U = eigval_gradient(Ui, da)
-    τ = - CFL * Δx / wave_speed^2 * ∂a∂U
-    return τ
+    gradient(Ui) do U
+        a = compute_max_abs_eigval(U, da)
+        return CFL * Δx / a
+    end
 end
 
 function compute_timestep_source(Λ_next, U_next, U_prev, μ_final, J_final, Δt, Δx, CFL, objectives, da::DiscreteAdjointSWE)
@@ -153,16 +156,16 @@ function set_flux_jvp_right_boundary!(Λl, Λc, Ul, Uc, Δt, Δx, da::DiscreteAd
     return left' * Λl + center' * Λc
 end
 
-function set_flux_jvp!(Λ, U, N, n, Δx, Δt, da::DiscreteAdjointSWE)
-    Λ[1, n-1] = set_flux_jvp_left_boundary!(Λ[1:2, n]...,
+function set_flux_jvp!(Λ, Λ_pp, U, N, n, Δx, Δt, da::DiscreteAdjointSWE)
+    Λ[1, n-1] = set_flux_jvp_left_boundary!(Λ_pp[1:2]...,
                                              U[1:2, n-1]...,
                                              Δt, Δx, da)
     for i in 2:N-1
-        Λ[i, n-1] = set_flux_jvp_interior!(Λ[i-1:i+1, n]...,
+        Λ[i, n-1] = set_flux_jvp_interior!(Λ_pp[i-1:i+1]...,
                                            U[i-1:i+1, n-1]...,
                                            Δt, Δx, da)
     end
-    Λ[N, n-1] = set_flux_jvp_right_boundary!(Λ[N-1:N, n]...,
+    Λ[N, n-1] = set_flux_jvp_right_boundary!(Λ_pp[N-1:N]...,
                                              U[N-1:N, n-1]...,
                                              Δt, Δx, da)
 end
@@ -178,12 +181,24 @@ function compute_objective_step(U, Δx, objectives::Objectives)
     return Jn
 end
 
-function add_bottom_source!(Λ, n, t, Δx, b, da::DiscreteAdjointSWE)
+function add_bottom_source!(Λ, Λ_pp, n, t, Δx, b, da::DiscreteAdjointSWE)
     Δt = t[n] - t[n-1]
     for j in axes(Λ, 1)
         Δb = b[j+1] - b[j]
         S12 = -9.81 * Δb * Δt / Δx
-        Λ[j, n-1] += State(S12 * momentum(Λ[j, n]), 0)
+        Λ[j, n-1] += State(S12 * momentum(Λ_pp[j]), 0)
+    end
+end
+
+
+
+function adjoint_pre_proc_step!(Λ_pp, Λ, U, n, da)
+    for j in axes(Λ, 1)
+        if height(U[j, n]) < depth_cutoff(da.primal)
+            Λ_pp[j] = State(height(Λ[j, n]), 0)
+        else
+            Λ_pp[j] = Λ[j, n]
+        end
     end
 end
 
@@ -191,6 +206,7 @@ end
 @views function solve_adjoint(Λ0, U::AverageDepthStates, objectives::Objectives, b, t, Δx, da::DiscreteAdjointSWE)
     U = U.U
     Λ = similar(U)
+    Λ_pp = similar(Λ0)
 
     Δt = t[end] - t[end-1]
     μ_final = compute_timestep_correction(Λ0, U[:, end-1], U[:, end], Δt)
@@ -200,9 +216,10 @@ end
     Λ[:, end] .= Λ0
     for n in M:-1:2
         Δt = t[n] - t[n-1]
-        set_flux_jvp!(Λ, U, N, n, Δx, Δt, da)
+        adjoint_pre_proc_step!(Λ_pp, Λ, U, n, da)
+        set_flux_jvp!(Λ, Λ_pp, U, N, n, Δx, Δt, da)
+        add_bottom_source!(Λ, Λ_pp, n, t, Δx, b, da)
         add_objective_source!(Λ[:, n-1], U[:, n-1], Δt, Δx, objectives, da)
-        add_bottom_source!(Λ, n, t, Δx, b, da)
         if n < M
             add_timestep_source!(Λ[:, n-1], Λ[:, n], U[:, n], U[:, n-1], μ_final, J_final, Δt, Δx, 0.25, objectives, da)
         end
