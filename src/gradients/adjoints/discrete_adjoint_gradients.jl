@@ -18,15 +18,15 @@ function adjoint_solver(primal_swe_problem::PrimalSWESolver{NoReconstruction, Fo
 end
 
 function compute_gradient!(G, Λ, U::AverageDepthStates, t, Δx, objectives::Objectives, da::DiscreteAdjointSWE)
-    G .= zero(eltype(G))
+    fill!(G, zero(eltype(G)))
     add_bottom_source_gradient_contribution!(G, Λ, U.U, t, Δx, objectives.design_indices, da)
 end
 
-function integrate_gradient(U, Λ, t, Δx, ::DiscreteAdjointSWE)
+@views function integrate_gradient(U, Λ, t, Δx, ::DiscreteAdjointSWE)
     return sum(momentum.(Λ[2:end]) .* height.(U[1:end-1]) .* diff(t)) * 9.81 / Δx
 end
 
-function add_bottom_source_gradient_contribution!(G, Λ, U, t, Δx, design_indices::Colon, da::DiscreteAdjointSWE)
+@views function add_bottom_source_gradient_contribution!(G, Λ, U, t, Δx, design_indices::Colon, da::DiscreteAdjointSWE)
     N, M = size(U)
     G[1] += integrate_gradient(U[1,:], Λ[1,:], t, Δx, da)
     for j in 2:N

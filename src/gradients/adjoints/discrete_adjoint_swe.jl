@@ -8,26 +8,30 @@ import OptimalBath: solve_adjoint
 using .OptimalBath: compute_ghost_cell, AdjointSWE
 
 
-const _numerical_flux = CentralUpwind(ShallowWaterEquations1D())
-
-abstract type Adjoint end
-
 struct DiscreteAdjointSWE{PrimalSolver<:VolumeFluxesSolver} <: AdjointSWE
     primal::PrimalSolver
 end
 
-function flux_left_grad_center(Ul, Uc)
+function primal_eq(da::DiscreteAdjointSWE)
+    return da.primal.simulator.system.equation
+end
+
+function primal_numerical_flux(da::DiscreteAdjointSWE)
+    return da.primal.simulator.system.numericalflux
+end
+
+function flux_left_grad_center(Ul, Uc, da::DiscreteAdjointSWE)
     return jacobian(Uc) do U
-        eq = _numerical_flux.eq
-        F = _numerical_flux(eq, Ul, U, XDIR)[1]
+        eq = primal_eq(da)
+        F = primal_numerical_flux(da)(eq, Ul, U, XDIR)[1]
         return F
     end
 end
 
-function flux_right_grad_center(Uc, Ur)
+function flux_right_grad_center(Uc, Ur, da::DiscreteAdjointSWE)
     return jacobian(Uc) do U
-        eq = _numerical_flux.eq
-        F = _numerical_flux(eq, U, Ur, XDIR)[1]
+        eq = primal_eq(da)
+        F = primal_numerical_flux(da)(eq, U, Ur, XDIR)[1]
         return F
     end
 end
@@ -125,9 +129,9 @@ function set_flux_jvp_left_boundary!(Λ1, Λ2, Uc, Ur, Δt, Δx, da::DiscreteAdj
     Ul = compute_ghost_cell(Uc)
     
     A = @SMatrix [1 0; 0 -1]
-    dFldU_ghost = flux_right_grad_center(Ul, Uc) * A
-    dFldU = flux_left_grad_center(Ul, Uc)
-    dFrdU = flux_right_grad_center(Uc, Ur)
+    dFldU_ghost = flux_right_grad_center(Ul, Uc, da) * A
+    dFldU = flux_left_grad_center(Ul, Uc, da)
+    dFrdU = flux_right_grad_center(Uc, Ur, da)
     center = I2 .- (dFrdU - dFldU_ghost - dFldU) / Δx * Δt
     right = dFrdU / Δx * Δt
     return center' * Λ1 + right' * Λ2
@@ -135,8 +139,8 @@ end
 
 
 function set_flux_jvp_interior!(Λl, Λc, Λr, Ul, Uc, Ur, Δt, Δx, da::DiscreteAdjointSWE)
-    dFldU = flux_left_grad_center(Ul, Uc)
-    dFrdU = flux_right_grad_center(Uc, Ur)
+    dFldU = flux_left_grad_center(Ul, Uc, da)
+    dFrdU = flux_right_grad_center(Uc, Ur, da)
 
     left = -dFldU / Δx * Δt
     center = I2 .- (dFrdU - dFldU) / Δx * Δt
@@ -147,10 +151,10 @@ end
 function set_flux_jvp_right_boundary!(Λl, Λc, Ul, Uc, Δt, Δx, da::DiscreteAdjointSWE)
     Ur = compute_ghost_cell(Uc)
     
-    dFldU = flux_left_grad_center(Ul, Uc)
-    dFrdU = flux_right_grad_center(Uc, Ur)
+    dFldU = flux_left_grad_center(Ul, Uc, da)
+    dFrdU = flux_right_grad_center(Uc, Ur, da)
     A = @SMatrix [1 0; 0 -1]
-    dFrdU_ghost = flux_left_grad_center(Uc, Ur) * A
+    dFrdU_ghost = flux_left_grad_center(Uc, Ur, da) * A
     left = -dFldU / Δx * Δt
     center = I2 .+ (dFldU - dFrdU_ghost - dFrdU) / Δx * Δt
     return left' * Λl + center' * Λc
@@ -181,7 +185,15 @@ function compute_objective_step(U, Δx, objectives::Objectives)
     return Jn
 end
 
+function bottom_source_type(::DiscreteAdjointSWE{<:PrimalSWESolver{R, TS, BottomSourceType}}) where {R, TS, BottomSourceType}
+    return BottomSourceType
+end
+
 function add_bottom_source!(Λ, Λ_pp, n, t, Δx, b, da::DiscreteAdjointSWE)
+    add_bottom_source!(Λ, Λ_pp, n, t, Δx, b, bottom_source_type(da))
+end
+
+function add_bottom_source!(Λ, Λ_pp, n, t, Δx, b, ::Type{DefaultBathymetrySource})
     Δt = t[n] - t[n-1]
     for j in axes(Λ, 1)
         Δb = b[j+1] - b[j]
@@ -189,7 +201,6 @@ function add_bottom_source!(Λ, Λ_pp, n, t, Δx, b, da::DiscreteAdjointSWE)
         Λ[j, n-1] += State(S12 * momentum(Λ_pp[j]), 0)
     end
 end
-
 
 
 function adjoint_pre_proc_step!(Λ_pp, Λ, U, n, da)
