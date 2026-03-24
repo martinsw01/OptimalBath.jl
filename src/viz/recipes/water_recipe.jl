@@ -7,7 +7,8 @@
     # ylim --> (0., H_ylim[2])
     legend --> :topleft
     # legendcolumns --> length(names)
-    label --> "w = h + B"#name
+    # label --> "w = h + B"#name
+    label --> name
     # label --> L"w = h + B"#name
 
     linewidth --> 0.5
@@ -23,7 +24,7 @@
 
     seriestype --> :path
     fillrange --> 0.#H_ylim[1]
-    fill_z --> abs.(UH)
+    fill_z --> UH
 
     colorbar_title --> " \nMagnitude of momentum (m^2s^{-1})"
     # colorbar_title --> " \nMagnitude of momentum (\\mathrm{m}^2\\mathrm{s}^{-1})"

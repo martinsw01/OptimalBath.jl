@@ -13,3 +13,15 @@
 
     [x], [B]
 end
+
+@userplot AdjointBathometryPlot
+@recipe function f(anim::AdjointBathometryPlot)
+    x, B = anim.args
+    seriestype --> :path
+    # fillrange --> -1.#0.#H_ylim[1]
+    seriescolor --> :brown
+    linestyle --> :dash
+    label --> "Bathymetry B"
+
+    [x], [B]
+end

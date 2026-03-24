@@ -1,7 +1,7 @@
 using Plots
 function plot_solution(W)
-    W1 = _height.(W)
-    W2 = _adjoint_momentum.(W)
+    W1 = height.(W)
+    W2 = momentum.(W)
     # J = compute_gradient(W2, Δt)
     plot(
         heatmap(W1', title="\$\\lambda_1\$", xlabel="Space", ylabel="Time"),
