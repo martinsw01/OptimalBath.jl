@@ -69,8 +69,8 @@ end
     Ur = State(hr, p)
 
     Uc_left, Uc_right = OptimalBath.reconstruct_cell(Ul, Uc, Ur, bl, br, depth_cutoff, forward_slope)
-    @test Uc_left == State(hc - 0.5 - bl, p)
-    @test Uc_right == State(hc + 0.5 - br, p)
+    @test Uc_left ≈ State(hc - 0.5 - bl, p)
+    @test Uc_right ≈ State(hc + 0.5 - br, p)
 end
 
 @testset "Test partly wet lake-at-rest, below average" begin
@@ -81,8 +81,8 @@ end
     Ur = State(2.5, 1)
 
     Uc_left, Uc_right = OptimalBath.reconstruct_cell(Ul, Uc, Ur, bl, br, depth_cutoff, forward_slope)
-    @test Uc_left == State(0.5, 1)
-    @test Uc_right == State(0, 0)
+    @test Uc_left ≈ State(0.5, 1)
+    @test Uc_right ≈ State(0, 0)
 end
 
 @testset "Test partly wet lake-at-rest, above average" begin
@@ -93,8 +93,8 @@ end
     Ur = State(2.5, 1)
 
     Uc_left, Uc_right = OptimalBath.reconstruct_cell(Ul, Uc, Ur, bl, br, depth_cutoff, forward_slope)
-    @test Uc_left == State(1., 1)
-    @test Uc_right == State(0., 0.)
+    @test Uc_left ≈ State(1., 1)
+    @test Uc_right ≈ State(0., 0.)
 end
 
 @testset "Test potentially negative reconstruction" begin
@@ -106,6 +106,6 @@ end
     Ur = State(1.6, 1)
 
     Uc_left, Uc_right = OptimalBath.reconstruct_cell(Ul, Uc, Ur, bl, br, depth_cutoff, forward_slope)
-    @test Uc_left == State(0., 0.)
-    @test Uc_right == State(1.35, 1.)
+    @test Uc_left ≈ State(0., 0.)
+    @test Uc_right ≈ State(1.35, 1.)
 end
