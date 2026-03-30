@@ -30,7 +30,7 @@ function compute_objective_and_gradient!(G, β, solver::PrimalSWESolver{NoRecons
     adjoint = adjoint_solver(solver, ag)
     Λ = solve_adjoint(Λ_end, U, objectives, adjusted_bathymetry, t, Δx, adjoint)
 
-    compute_gradient!(G, Λ, U, t, Δx, objectives, adjoint)
+    compute_gradient!(G, Λ, U, β, t, Δx, objectives, adjoint)
     objective = compute_objective(U, t, x, β, objectives, TS)
     return objective
 end

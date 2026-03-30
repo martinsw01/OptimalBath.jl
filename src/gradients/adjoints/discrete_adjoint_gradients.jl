@@ -4,7 +4,7 @@ using ..OptimalBath
 using ..OptimalBath: extrapolate_β_to_full_domain, initial_state
 import ..OptimalBath: compute_objective_and_gradient!, compute_gradient!, adjoint_solver
 
-using ForwardDiff: derivative
+using ForwardDiff
 using VolumeFluxes: XDIR
 
 include("discrete_adjoint_swe.jl")
@@ -17,8 +17,8 @@ function adjoint_solver(primal_swe_problem::PrimalSWESolver{NoReconstruction, Fo
     return DiscreteAdjointSWE(primal_swe_problem)
 end
 
-function compute_gradient!(G, Λ, U::AverageDepthStates, t, Δx, objectives::Objectives, da::DiscreteAdjointSWE)
-    fill!(G, zero(eltype(G)))
+function compute_gradient!(G, Λ, U::AverageDepthStates, β, t, Δx, objectives::Objectives, da::DiscreteAdjointSWE)
+    ForwardDiff.gradient!(G, objectives.regularization, β)
     add_bottom_source_gradient_contribution!(G, Λ, U.U, t, Δx, objectives.design_indices, da)
 end
 
