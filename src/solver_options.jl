@@ -16,6 +16,18 @@ function assert_correct_sizes(N, U0, initial_bathymetry)
     @assert size(U0.U, 1) == N "Initial states must have size N=$(N) in the first dimension, but got $(size(U0.U, 1))"
 end
 
+
+function cap_height_to_bathymetry(U, bathymetry)
+    U = U.U
+    U_capped = similar(U)
+    for j in eachindex(U)
+        b_avg = 0.5 * (bathymetry[j] + bathymetry[j+1])
+        h_capped = max(height(U[j]), b_avg)
+        U_capped[j] = State(h_capped, momentum(U[j]))
+    end
+    return States{Average, Elevation}(U_capped)
+end
+
 """
     PrimalSWEProblem(N, U0, T; initial_bathymetry=zeros(N + 1), domain=[0.0 1.0])
 A data structure representing the primal shallow water equations parameters.
@@ -28,7 +40,8 @@ struct PrimalSWEProblem{Bathymetry, FloatType, InitialStates<:AverageElevationSt
     N::Int64
     function PrimalSWEProblem(N, U0, T; initial_bathymetry=zeros(N + 1), domain=[0.0 1.0])
         assert_correct_sizes(N, U0, initial_bathymetry)
-        return new{typeof(initial_bathymetry), typeof(T), typeof(U0), typeof(domain)}(initial_bathymetry, T, U0, domain, N)
+        capped_U0 = cap_height_to_bathymetry(U0, initial_bathymetry)
+        return new{typeof(initial_bathymetry), typeof(T), typeof(capped_U0), typeof(domain)}(initial_bathymetry, T, capped_U0, domain, N)
     end
 end
 
