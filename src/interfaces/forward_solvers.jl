@@ -15,7 +15,7 @@ struct DefaultBathymetrySource <: BathymetrySourceTerm end
 
 abstract type PrimalSWESolver{R<:Reconstruction, TS<:TimeStepper, BS<:BathymetrySourceTerm} end
 
-struct LinearReconstruction <: Reconstruction end
+abstract type LinearReconstruction <: Reconstruction end
 
 struct NoReconstruction <: Reconstruction end
 

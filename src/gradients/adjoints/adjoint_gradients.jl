@@ -35,7 +35,7 @@ function compute_objective_and_gradient!(G, β, solver::PrimalSWESolver{NoRecons
     return objective
 end
 
-function compute_objective_and_gradient!(G, β, solver::PrimalSWESolver{LinearReconstruction, TS, BS}, objectives::Objectives, ag::AdjointGradient) where {TS, BS}
+function compute_objective_and_gradient!(G, β, solver::PrimalSWESolver{R, TS, BS}, objectives::Objectives, ag::AdjointGradient) where {R<:LinearReconstruction, TS, BS}
     δb = extrapolate_β_to_full_domain(β, objectives.design_indices, length(get_bathymetry(solver)))
 
     (Ul, Ur), t, x = solve_primal(solver, δb)

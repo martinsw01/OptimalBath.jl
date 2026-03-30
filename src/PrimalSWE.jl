@@ -1,4 +1,4 @@
-export VolumeFluxesBackend, VolumeFluxesSolver
+export VolumeFluxesBackend, VolumeFluxesSolver, MinModSlope
 
 using VolumeFluxes, ElasticArrays
 
@@ -8,23 +8,25 @@ function build_solver(spec::SolverSpec{PP, VolumeFluxesBackend, SO}, ::Type{Floa
     return VolumeFluxesSolver(spec, FloatType)
 end
 
-function get(::LinearReconstruction)
+struct MinModSlope <: LinearReconstruction end
+
+function to_VF(::MinModSlope)
     return VolumeFluxes.LinearReconstruction()
 end
 
-function get(::NoReconstruction)
+function to_VF(::NoReconstruction)
     return VolumeFluxes.NoReconstruction()
 end
 
-function get(::ForwardEuler)
+function to_VF(::ForwardEuler)
     return VolumeFluxes.ForwardEulerStepper()
 end
 
-function get(::RK2)
+function to_VF(::RK2)
     return VolumeFluxes.RungeKutta2()
 end
 
-function get(::DefaultBathymetrySource)
+function to_VF(::DefaultBathymetrySource)
     return VolumeFluxes.SourceTermBottom()
 end
 
@@ -117,9 +119,8 @@ function create_simulator(problem, reconstruction, timestepper, bathymetry_sourc
     grid = create_grid(problem, reconstruction)
     equation = construct_equation(problem, reconstruction, cpu_backend, grid)
     numericalflux = VolumeFluxes.CentralUpwind(equation)
-    conserved_system = VolumeFluxes.ConservedSystem(cpu_backend, get(reconstruction), numericalflux, equation, grid, [get(bathymetry_source)])
-    simulator = VolumeFluxes.Simulator(cpu_backend, conserved_system, get(timestepper), grid)
-    # VolumeFluxes.set_current_state!(simulator, problem.U0.U)
+    conserved_system = VolumeFluxes.ConservedSystem(cpu_backend, to_VF(reconstruction), numericalflux, equation, grid, [to_VF(bathymetry_source)])
+    simulator = VolumeFluxes.Simulator(cpu_backend, conserved_system, to_VF(timestepper), grid)
     return simulator
 end
 
@@ -155,8 +156,8 @@ function recording_callback(solver::VolumeFluxesSolver{S,P, NoReconstruction, TS
     return recording_averages_callback(solver, t0)
 end
 
-function recording_callback(solver::VolumeFluxesSolver{S,P, LinearReconstruction, TS, BS, F}, t0) where {S, P, TS, BS, F}
-    return recording_reconstructions_callback(solver.simulator, t0)
+function recording_callback(solver::VolumeFluxesSolver{S,P, R, TS, BS, F}, t0) where {S, P, R<:LinearReconstruction, TS, BS, F}
+    return recording_averages_callback(solver, t0) #recording_reconstructions_callback(solver.simulator, t0)
 end
 
 function create_callback(f, ::VolumeFluxesSolver)
@@ -197,11 +198,15 @@ function set_initial_state!(simulator, problem, β)
     end
     VolumeFluxes.update_bc!(simulator, VolumeFluxes.current_state(simulator))
 end
-    
+
+function reset_time!(simulator)
+    simulator.t[1] = zero(eltype(simulator.t))
+end
 
 function reset_simulator!(simulator, problem, β)
     update_bathymetry!(simulator, problem, β)
     set_initial_state!(simulator, problem, β)
+    reset_time!(simulator)
 end
 
 function solve_primal(solver::VolumeFluxesSolver, β)
@@ -335,3 +340,37 @@ end
 function only_right_dry(h_left, h_right, depth_cutoff)
     return h_left > depth_cutoff && h_right < depth_cutoff
 end
+
+
+# using VolumeFluxes
+# using LogExpFunctions: logsumexp
+
+# struct SmoothLinearReconstruction <: Reconstruction end
+
+# struct VFSmoothLinearReconstruction <: VolumeFluxes.Reconstruction 
+#     θ::Float64
+#     ε::Float64
+#     VFSmoothLinearReconstruction(θ=1.2, ε=1e-1) = new(θ, ε)
+# end
+
+# function soft_sign(x, ε=1e-1)
+#     return tanh(x / ε)
+# end
+
+# function soft_min(a, b, c, ε=1e-1)
+#     return -logsumexp((-a/ε, -b/ε, -c/ε)) * ε
+# end
+
+# function soft_minmod(a, b, c, ε=1e-1)
+#     s = soft_sign(a*b, ε) * soft_sign(a*c, ε)
+#     return 0.5 * soft_sign(a, ε) * (1 + s) * soft_min(abs(a), abs(b), abs(c), ε)
+# end
+
+# function soft_minmod_slope(left, center, right, θ, ε=1e-1)
+#     forward_diff = right .- center
+#     backward_diff = center .- left
+#     central_diff = (forward_diff .+ backward_diff) ./ 2.0
+#     return soft_minmod.(θ .* forward_diff, central_diff, θ .* backward_diff, ε)
+# end
+
+# function smooth_minmod end

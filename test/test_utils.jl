@@ -52,7 +52,7 @@ function lake_at_rest(bathymetry)
     return fill(U, N, M), t, x
 end
 
-function solve_primal(problem::MockSolver{LinearReconstruction}, δb)
+function solve_primal(problem::MockSolver{R}, δb) where {R<:LinearReconstruction}
     U, t, x = lake_at_rest(problem.initial_bathymetry .+ δb)
     Ul = States{Left, Depth}(U)
     Ur = States{Right, Depth}(U)
@@ -99,7 +99,7 @@ end
     N = 10
     bathymetry = zeros(N + 1)
     β = zeros(4)
-    solver = MockSolver(N, LinearReconstruction())
+    solver = MockSolver(N, MinModSlope())
     objectives = Objectives(design_indices=[3, 4, 5, 8], interior_objective=Mass())
     gradient_type = ContinuousAdjointGradient(bathymetry)
 
