@@ -2,42 +2,6 @@ export AdjointSWE, solve_adjoint
 
 abstract type AdjointSWE end
 
-struct Grid{Dims, StepSizes, TotalCells}
-    Δx::StepSizes
-    N::TotalCells
-    function Grid(Δx, N)
-        @assert length(Δx) == length(N)
-        @assert eltype(N) <: Integer
-        new{length(Δx), typeof(Δx), typeof(N)}(Δx, N)
-    end
-end
-
-function interior_cell_indices(grid::Grid{1})
-    return 2:grid.N[1]-1
-end
-
-function for_each_interior_directional_stencil(f, dir, grid::Grid{1})
-    for i in interior_cell_indices(grid)
-        f(i-1, i, i+1)
-    end
-end
-
-function for_each_cell(f, grid::Grid{1})
-    indices = 1:grid.N[1]
-    for i in indices
-        f(i)
-    end
-end
-
-function for_each_left_boundary_directional_stencil(f, dir, ::Grid{1})
-    f(1, 2)
-end
-
-function for_each_right_boundary_directional_stencil(f, dir, grid::Grid{1})
-    N = grid.N[1]
-    f(N-1, N)
-end
-
 function compute_ghost_cell(U::State{1}, dir)
     return typeof(U)(U[1], -U[2])
 end

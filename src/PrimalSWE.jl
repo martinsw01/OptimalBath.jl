@@ -76,15 +76,13 @@ function _create_grid(N, domain, ::NoReconstruction)
 end
 
 function _create_grid(N, domain, gc)
-    return VolumeFluxes.CartesianGrid(N; gc=gc, boundary=VolumeFluxes.WallBC(), extent = domain)
+    return VolumeFluxes.CartesianGrid(N...; gc=gc, boundary=VolumeFluxes.WallBC(), extent = domain)
 end
 
 @views function extrapolate_bathymetry(initial_bathymetry, float_type, gc)
     b = similar(initial_bathymetry, float_type, length(initial_bathymetry) + 2*gc)
     b[gc+1:end-gc] .= initial_bathymetry
     update_bc!(b, gc)
-    # b[1:gc] .= initial_bathymetry[2*gc:-1:gc+1]
-    # b[end-gc+1:end] .= initial_bathymetry[end-2*gc+1:end-gc]
     return b
 end
 

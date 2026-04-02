@@ -9,8 +9,13 @@ using .OptimalBath: compute_ghost_cell, AdjointSWE
 using .OptimalBath: Grid, for_each_left_boundary_directional_stencil, for_each_interior_directional_stencil, for_each_right_boundary_directional_stencil
 
 
-struct DiscreteAdjointSWE{PrimalSolver<:VolumeFluxesSolver} <: AdjointSWE
+struct DiscreteAdjointSWE{PrimalSolver<:VolumeFluxesSolver, Dims} <: AdjointSWE
     primal::PrimalSolver
+    grid::Grid{Dims}
+    function DiscreteAdjointSWE(primal)
+        grid = primal.problem.grid
+        return new{typeof(primal), length(grid.Δx)}(primal, grid)
+    end
 end
 
 function primal_eq(da::DiscreteAdjointSWE)
@@ -35,21 +40,6 @@ function flux_right_grad_center(Uc, Ur, dir, da::DiscreteAdjointSWE)
         F = primal_numerical_flux(da)(eq, U, Ur, Val(dir))[1]
         return F
     end
-end
-
-function identity_matrix(N)
-    I = zeros(N, N)
-    for i in 1:N
-        I[i, i] = 1.0
-    end
-    return I
-end
-
-I2 = identity_matrix(2)
-
-function ddisplay(A)
-    A = round.(A, digits=6)
-    println("{{$(A[1, 1]), $(A[1, 2])}, {$(A[2, 1]), $(A[2, 2])}}")
 end
 
 
@@ -88,7 +78,7 @@ end
 function determine_time_step_index(U, da::DiscreteAdjointSWE)
     findmax(U) do U_j
         return compute_max_abs_eigval(U_j, da)
-    end
+    end |> last
 end
 
 function compute_timestep_correction(Λ_next, U_prev, U_next, Δt)
@@ -103,7 +93,7 @@ function compute_timestep_gradient(CFL, Δx, Ui, da::DiscreteAdjointSWE)
 end
 
 function compute_timestep_source(Λ_next, U_next, U_prev, μ_final, J_final, Δt, Δx, CFL, objectives, da::DiscreteAdjointSWE)
-    wave_speed, i = determine_time_step_index(U_prev, da)
+    i = determine_time_step_index(U_prev, da)
     τ = compute_timestep_gradient(CFL, Δx, U_prev[i], da)
     μ_step = compute_timestep_correction(Λ_next, U_prev, U_next, Δt)
     J_step = compute_objective_step(U_prev, Δx, objectives)
@@ -117,9 +107,8 @@ function add_timestep_source!(Λ_prev, Λ_next, U_next, U_prev, μ_final, J_fina
     Λ_prev[i] += source
 end
 
-# Only used for the adjoint dot product test
 function add_objective_timestep_source!(Λ_prev, U_prev, J_final, Δx, CFL, objectives, da::DiscreteAdjointSWE)
-    wave_speed, i = determine_time_step_index(U_prev, da)
+    i = determine_time_step_index(U_prev, da)
     τ = compute_timestep_gradient(CFL, Δx, U_prev[i], da)
     J_step = compute_objective_step(U_prev, Δx, objectives)
     ΔJ = J_step - J_final
@@ -127,83 +116,59 @@ function add_objective_timestep_source!(Λ_prev, U_prev, J_final, Δx, CFL, obje
 end
 
 function add_flux_jvp_left_boundary!(Λ1, Λ2, Uc, Ur, Δt, Δx, dir, da::DiscreteAdjointSWE)
-    # @show Uc, Ur
     Ul = compute_ghost_cell(Uc, dir)
-    # @show Ul
     
     A = @SMatrix [1 0; 0 -1]
     dFldU_ghost = flux_right_grad_center(Ul, Uc, dir, da) * A
     dFldU = flux_left_grad_center(Ul, Uc, dir, da)
     dFrdU = flux_right_grad_center(Uc, Ur, dir, da)
-    center = I2 .- (dFrdU - dFldU_ghost - dFldU) / Δx * Δt
+    center = - (dFrdU - dFldU_ghost - dFldU) / Δx * Δt
     right = dFrdU / Δx * Δt
     return center' * Λ1 + right' * Λ2
 end
 
 
 function add_flux_jvp_interior!(Λl, Λc, Λr, Ul, Uc, Ur, Δt, Δx, dir, da::DiscreteAdjointSWE)
-    # @show Ul, Uc, Ur
     dFldU = flux_left_grad_center(Ul, Uc, dir, da)
     dFrdU = flux_right_grad_center(Uc, Ur, dir, da)
 
     left = -dFldU / Δx * Δt
-    center = I2 .- (dFrdU - dFldU) / Δx * Δt
+    center = - (dFrdU - dFldU) / Δx * Δt
     right = dFrdU / Δx * Δt
     return left' * Λl + center' * Λc + right' * Λr
 end
 
 function add_flux_jvp_right_boundary!(Λl, Λc, Ul, Uc, Δt, Δx, dir, da::DiscreteAdjointSWE)
-    # @show Ul, Uc
     Ur = compute_ghost_cell(Uc, dir)
-    # @show Ur
     
     dFldU = flux_left_grad_center(Ul, Uc, dir, da)
     dFrdU = flux_right_grad_center(Uc, Ur, dir, da)
     A = @SMatrix [1 0; 0 -1]
     dFrdU_ghost = flux_left_grad_center(Uc, Ur, dir, da) * A
     left = -dFldU / Δx * Δt
-    center = I2 .+ (dFldU - dFrdU_ghost - dFrdU) / Δx * Δt
+    center = (dFldU - dFrdU_ghost - dFrdU) / Δx * Δt
     return left' * Λl + center' * Λc
 end
 
 function add_flux_jvp!(Λ, Λ_pp, U, n, Δt, dir, grid, da::DiscreteAdjointSWE)
     Δx = grid.Δx[dir]
     for_each_left_boundary_directional_stencil(dir, grid) do center, right
-        # @show center, right
-        k = add_flux_jvp_left_boundary!(Λ_pp[center], Λ_pp[right],
-                                                     U[center, n-1], U[right, n-1],
-                                                     Δt, Δx, dir, da)
-        @assert !any(isnan.(k)) "NaN detected in left boundary flux JVP at time step $n"
-        Λ[center, n-1] = k
-        # Λ[center, n-1] += add_flux_jvp_left_boundary!(Λ_pp[center], Λ_pp[right],
-        #                                              U[center, n], U[right, n],
-        #                                              Δt, Δx, dir, da)
+        Λ[center, n-1] += add_flux_jvp_left_boundary!(Λ_pp[center], Λ_pp[right],
+                                                      U[center, n-1], U[right, n-1],
+                                                      Δt, Δx, dir, da)
     end
 
     for_each_interior_directional_stencil(dir, grid) do left, center, right
-        # @show left, center, right
-        k = add_flux_jvp_interior!(Λ_pp[left], Λ_pp[center], Λ_pp[right],
-                                               U[left, n-1], U[center, n-1], U[right, n-1],
-                                               Δt, Δx, dir, da)
-        @assert !any(isnan.(k)) "NaN detected in interior flux JVP at time step $n"
-        Λ[center, n-1] = k
-        # Λ[center, n-1] += add_flux_jvp_interior!(Λ_pp[left], Λ_pp[center], Λ_pp[right],
-        #                                        U[left, n], U[center, n], U[right, n],
-        #                                        Δt, Δx, dir, da)
+        Λ[center, n-1] += add_flux_jvp_interior!(Λ_pp[left], Λ_pp[center], Λ_pp[right],
+                                                 U[left, n-1], U[center, n-1], U[right, n-1],
+                                                 Δt, Δx, dir, da)
     end
 
     for_each_right_boundary_directional_stencil(dir, grid) do left, center
-        # @show left, center
-         k = add_flux_jvp_right_boundary!(Λ_pp[left], Λ_pp[center],
-                                                      U[left, n-1], U[center, n-1],
-                                                      Δt, Δx, dir, da)
-        @assert !any(isnan.(k)) "NaN detected in right boundary flux JVP at time step $n"
-        Λ[center, n-1] = k
-        #  Λ[center, n-1] += add_flux_jvp_right_boundary!(Λ_pp[left], Λ_pp[center],
-        #                                               U[left, n], U[center, n],
-        #                                               Δt, Δx, dir, da)
+        Λ[center, n-1] += add_flux_jvp_right_boundary!(Λ_pp[left], Λ_pp[center],
+                                                       U[left, n-1], U[center, n-1],
+                                                       Δt, Δx, dir, da)
     end
-    assert_not_nan(Λ, n-1)
 end
 
 function add_objective_source!(Λ, U, Δt, Δx, objectives, ::DiscreteAdjointSWE)
@@ -245,6 +210,7 @@ function adjoint_pre_proc_step!(Λ_pp, Λ, U, n, grid, da)
         else
             Λ_pp[j] = Λ[j, n]
         end
+        Λ[j, n-1] = Λ_pp[j]
     end
 end
 
@@ -253,25 +219,12 @@ function time_steps(U, ::Grid{Dims}) where Dims
     return size(U, Dims+1)
 end
 
-
-function assert_not_nan(U, n)
-    assert_not_nan(@view U[:, n])
-end
-
-function assert_not_nan(U)
-    for j in eachindex(U)
-        @assert !any(isnan.(U[j])) "U[$j] contains NaN"
-    end
-end
-
 @views function solve_adjoint(Λ_end, U::AverageDepthStates, objectives::Objectives, b, t, Δx, da::DiscreteAdjointSWE)
     U = U.U
-    Λ = fill(State(0.0, NaN), size(U))
-    # Λ = similar(U)
+    Λ = similar(U)
     Λ_pp = similar(Λ_end)
 
-    N = size(U, 1)
-    grid = Grid((Δx,), (N,))
+    grid = da.grid
 
     Δt = t[end] - t[end-1]
     μ_final = compute_timestep_correction(Λ_end, U[:, end-1], U[:, end], Δt)
@@ -280,22 +233,14 @@ end
     M = time_steps(U, grid)
     Λ[:, end] .= Λ_end
     dir = 1
-    @assert Val(dir) == XDIR
     for n in M:-1:2
-        # @show "---------------"
-        # @show n
         Δt = t[n] - t[n-1]
         adjoint_pre_proc_step!(Λ_pp, Λ, U, n, grid, da)
-        assert_not_nan(Λ_pp)
         add_flux_jvp!(Λ, Λ_pp, U, n, Δt, dir, grid, da)
-        assert_not_nan(Λ, n-1)
         add_bottom_source!(Λ, Λ_pp, n, t, Δx, b, da)
-        assert_not_nan(Λ, n-1)
         add_objective_source!(Λ[:, n-1], U[:, n-1], Δt, Δx, objectives, da)
-        assert_not_nan(Λ, n-1)
         if n < M
             add_timestep_source!(Λ[:, n-1], Λ[:, n], U[:, n], U[:, n-1], μ_final, J_final, Δt, Δx, 0.25, objectives, da)
-            assert_not_nan(Λ, n-1)
         end
     end
     return Λ
