@@ -91,7 +91,7 @@ end
     x = range(0, stop=L, length=N+1)
     t = create_random_time_array(T, M)
     β = rand(N+1)
-    U = [rand(State{Float64}) for _ in 1:N, _ in 1:M]
+    U = [rand(State{2, Float64}) for _ in 1:N, _ in 1:M]
     U = States{Average, Depth}(U)
     Ul = States{Left, Depth}(U.U)
     Ur = States{Right, Depth}(U.U)

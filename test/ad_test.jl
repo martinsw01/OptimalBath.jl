@@ -49,7 +49,7 @@ struct ObjectiveMockBackend <: SolverBackend
     x
     function ObjectiveMockBackend(N, M)
         initial_bathymetry = -rand(N + 1)
-        U = rand(State{Float64}, N, M)
+        U = rand(State{2, Float64}, N, M)
         t = [0.0; cumsum(rand(M - 1))] ./ M
         x = range(0.0, stop=1.0, length=N+1)
         return new(initial_bathymetry, U, t, x)

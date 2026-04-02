@@ -42,7 +42,7 @@ function objective_density(::NoObjective, U)
 end
 
 
-function objective_density_gradient(obj::Objective, U::States{S, Depth, T, N, A}, I...) where {S, T, N, A}
+function objective_density_gradient(obj::Objective, U::States{S, Depth}, I...) where S
     return objective_density_gradient.(obj, @view U.U[I...])
 end
 
@@ -84,19 +84,19 @@ function _compute_objective(U::States, t, x, β, objectives, timestepper)
     return interior_integral + terminal_integral
 end
 
-function compute_objective(U::States{S, Depth, T, D, A}, t, x, β, objectives::Objectives, timestepper::Type{<:TimeStepper}) where {S, T, D, A}
+function compute_objective(U::States{S, Depth}, t, x, β, objectives::Objectives, timestepper::Type{<:TimeStepper}) where S
     return _compute_objective(U, t, x, β, objectives, timestepper)
 end
 
-function compute_objective(U::States{S, Depth, T, D, A}, t, x, β, objectives::Objectives, timestepper::TimeStepper) where {S, T, D, A}
+function compute_objective(U::States{S, Depth}, t, x, β, objectives::Objectives, timestepper::TimeStepper) where S
     return compute_objective(U, t, x, β, objectives, typeof(timestepper))
 end
 
-function compute_objective(Ul::States{Left, Depth, T, D, A}, Ur::States{Right, Depth, T, D, A}, t, x, β, objectives::Objectives, timestepper::Type{<:TimeStepper}) where {T, D, A}
+function compute_objective(Ul::States{Left, Depth}, Ur::States{Right, Depth}, t, x, β, objectives::Objectives, timestepper::Type{<:TimeStepper})
     return 0.5 * (_compute_objective(Ul, t, x, β, objectives, timestepper) +
                   _compute_objective(Ur, t, x, β, objectives, timestepper))
 end
 
-function compute_objective(Ul::States{Left, Depth, T, D, A}, Ur::States{Right, Depth, T, D, A}, t, x, β, objectives::Objectives, timestepper::TimeStepper) where {T, D, A}
+function compute_objective(Ul::States{Left, Depth}, Ur::States{Right, Depth}, t, x, β, objectives::Objectives, timestepper::TimeStepper)
     return compute_objective(Ul, Ur, t, x, β, objectives, typeof(timestepper))
 end

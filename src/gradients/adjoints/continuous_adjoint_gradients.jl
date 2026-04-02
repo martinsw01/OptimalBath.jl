@@ -51,10 +51,10 @@ function _compute_gradient!(G, Λ, U, t, design_indices)
     end
 end
 
-function compute_gradient!(G, Λ, U::States{Average, Depth, T, D, A}, t, design_indices) where {T, D, A}
+function compute_gradient!(G, Λ, U::States{Average, Depth}, t, design_indices)
     _compute_gradient!(G, Λ, U.U, t, design_indices)
 end
 
-function compute_gradient!(G, Λ, Ul::States{Left, Depth, T, D, A}, Ur::States{Right, Depth, T, D, A}, t, design_indices) where {T, D, A}
+function compute_gradient!(G, Λ, Ul::States{Left, Depth}, Ur::States{Right, Depth}, t, design_indices)
     _compute_gradient!(G, Λ, 0.5 .* (Ul.U .+ Ur.U), t, design_indices)
 end

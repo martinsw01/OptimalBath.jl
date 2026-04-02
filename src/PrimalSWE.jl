@@ -30,7 +30,7 @@ function to_VF(::DefaultBathymetrySource)
     return VolumeFluxes.SourceTermBottom()
 end
 
-const InitialStates{FloatType} = States{Average, Elevation, FloatType, 1, Vector{State{FloatType}}}
+const InitialStates{S} = States{Average, Elevation, Vector{S}}
 
 """
     VolumeFluxesSolver(spec::SolverSpec, float_type)
@@ -234,7 +234,7 @@ function initial_state(solver::VolumeFluxesSolver)
     return solver.problem.U0
 end
 
-using VolumeFluxes: for_each_cell, B_cell, B_face_left, B_face_right, minmod_slope, AllPracticalSWE, for_each_inner_cell
+using VolumeFluxes: B_cell, B_face_left, B_face_right, minmod_slope, AllPracticalSWE, for_each_inner_cell
 import VolumeFluxes: reconstruct!
 
 """

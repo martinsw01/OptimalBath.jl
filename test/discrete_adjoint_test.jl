@@ -8,7 +8,7 @@ end
 
 function unflatten(u_flat)
     N = length(u_flat) ÷ 2
-    [State(u_flat[2i-1:2i]) for i in 1:N]
+    [State{2}(u_flat[2i-1:2i]) for i in 1:N]
 end
 
 function unflatten(u_flat, N)
@@ -54,14 +54,14 @@ end
 
 function adjoint_dot_test(N, compute_U0, bathymetry)
     U0 = compute_U0(N)
-    δU0 = rand(State{Float64}, N)
+    δU0 = rand(State{2, Float64}, N)
     U, δU, t, solver = tangent_linear_model(N, U0.U, δU0, bathymetry)
 
     U = unsafe_to_depth!(U, bathymetry)
     β = zeros(N+1)
 
     objectives = Objectives()
-    Λ0 = rand(State{Float64}, N)
+    Λ0 = rand(State{2, Float64}, N)
     Δx = 1/N
 
     Λ = solve_adjoint(Λ0, U, objectives, bathymetry, t, Δx, DiscreteAdjointSWE(solver))
@@ -94,13 +94,13 @@ end
 function general_adjoint_dot_test(N, compute_U0, bathymetry)
     U0 = compute_U0(N)
     β = zeros(N+1)
-    δU0 = rand(State{Float64}, N)
+    δU0 = rand(State{2, Float64}, N)
     U, δU, t, solver = tangent_linear_model(N, U0.U, δU0, bathymetry)
 
     U = unsafe_to_depth!(U, bathymetry)
     β = zeros(N+1)
     objectives = Objectives(interior_objective=KineticEnergy())
-    Λ0 = rand(State{Float64}, N)
+    Λ0 = rand(State{2, Float64}, N)
     Δx = 1/N
     da = DiscreteAdjointSWE(solver)
     Λ = solve_adjoint(Λ0, U, objectives, bathymetry, t, Δx, da)
@@ -129,7 +129,7 @@ function compare_to_ad(N, compute_U0, initial_bathymetry, β)
 end
 
 function random_U0(N)
-    U0 = rand(State{Float64}, N)
+    U0 = rand(State{2, Float64}, N)
     return States{Average, Elevation}(U0)
 end
 

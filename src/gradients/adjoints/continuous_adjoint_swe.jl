@@ -130,8 +130,8 @@ function solve_adjoint(Λ0, U::AverageDepthStates, objectives::Objectives, b, t,
     return Λ
 end
 
-const LeftDepthStates{T, N, A} = States{Left, Depth, T, N, A}
-const RightDepthStates{T, N, A} = States{Right, Depth, T, N, A}
+const LeftDepthStates{A} = States{Left, Depth, A}
+const RightDepthStates{A} = States{Right, Depth, A}
 
 wet(Ul⁺, Uc⁻, Uc⁺, Ur⁻) = !left_interface_dry(Ul⁺, Uc⁻) && !right_interface_dry(Uc⁺, Ur⁻)
 right_interface_dry(Uc⁺, Ur⁻) = height(Uc⁺) < desingularizing_kappa || height(Ur⁻) < desingularizing_kappa
