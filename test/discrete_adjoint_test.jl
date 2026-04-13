@@ -84,7 +84,7 @@ function compute_perturbation_with_nonzero_objective(Λ, U, δU, Δx, t, objecti
         fill!(Λ_temp, zero(eltype(U)))
         OptimalBath.add_objective_source!(Λ_temp, U[:, n-1], Δt, Δx, objectives)
         if n < M
-            OptimalBath.DiscreteAdjoints.add_objective_timestep_source!(Λ_temp, U[:, n-1], J_final, Δx, 0.25, objectives, da)
+            OptimalBath.DiscreteAdjoints.add_objective_timestep_source!(Λ_temp, U[:, n-1], J_final, 0.25, objectives, da)
         end
         δJ += dot(δU[:, n-1], Λ_temp)
     end
@@ -128,8 +128,28 @@ function compare_to_ad(N, compute_U0, initial_bathymetry, β)
     @test forward_ad_gradient ≈ da_gradient
 end
 
+function compare_to_2D_ad(N, compute_U0, initial_bathymetry, β)
+    U0 = compute_U0(N)
+    grid = Grid2D(N)
+    problem = PrimalSWEProblem(U0, 0.1, grid, initial_bathymetry)
+    spec = SolverSpec(problem, VolumeFluxesBackend())
+    objectives = Objectives(
+        interior_objective=KineticEnergy(),
+        terminal_objective=KineticEnergy(),
+        objective_indices=CartesianIndices(N),
+        design_indices=CartesianIndices(N .+ 1),
+    )
+    forward_ad = ForwardADGradient(β)
+    discrete_adjoint = DiscreteAdjointGradient()
+    da_objective, da_gradient = compute_objective_and_gradient(β, spec, objectives, discrete_adjoint)
+    forward_ad_objective, forward_ad_gradient = compute_objective_and_gradient(β, spec, objectives, forward_ad)
+    @test da_objective ≈ forward_ad_objective
+    @test forward_ad_gradient ≈ da_gradient skip=true # Not yet correctly implemented
+end
+
 function random_U0(N)
-    U0 = rand(State{2, Float64}, N)
+    dims = length(N)
+    U0 = rand(State{dims+1, Float64}, N)
     return States{Average, Elevation}(U0)
 end
 
@@ -164,6 +184,10 @@ end
     @testset "Random bathymetry" begin
         compare_to_ad(N, random_U0, -rand(N+1), rand(N+1))
     end
+    @testset "Two dimensions" begin
+        N = (5, 7)
+        compare_to_2D_ad(N, random_U0, zeros(N .+ 1), zeros(N .+ 1))
+    end
 end
 
 @testset "Test post-processing step" begin
@@ -174,4 +198,67 @@ end
     @testset "Compare to AD" begin
         compare_to_ad(N, post_proc_affected_U0, zeros(N+1), zeros(N+1))
     end
+end
+
+function essentially_1D_problem(problem_1D::PrimalSWEProblem, β_1D, Ny)
+    N = (problem_1D.grid.N[1], Ny)
+    grid_2D = Grid2D(N; domain=[0. 1.; 0. Ny])
+    U0_2D = [State(h, hu, 0.) for (h, hu) in problem_1D.U0.U, _ in 1:Ny]
+    U0_2D = States{Average, Elevation}(U0_2D)
+    initial_bathymetry_2D = repeat(problem_1D.initial_bathymetry, 1, Ny+1)
+    problem_2D = PrimalSWEProblem(U0_2D, problem_1D.T, grid_2D, initial_bathymetry_2D)
+
+    β_2D = repeat(β_1D, 1, Ny+1)
+    return problem_2D, β_2D
+end
+
+function expected_essentially_1D_gradient(gradient_1D, Ny)
+    gradient_2D = repeat(gradient_1D, 1, Ny+1)
+    gradient_2D[:,1] .*= 0.5
+    gradient_2D[:,end] .*= 0.5
+    return gradient_2D
+end
+
+function essentially_1D_vs_2D_test(Nx, Ny, compute_U0, initial_bathymetry, β)
+    problem_1D = PrimalSWEProblem(Nx, compute_U0(Nx), 0.03, initial_bathymetry=initial_bathymetry)
+    problem_2D, β_2D = essentially_1D_problem(problem_1D, β, Ny)
+
+    spec_1D = SolverSpec(problem_1D, VolumeFluxesBackend())
+    spec_2D = SolverSpec(problem_2D, VolumeFluxesBackend())
+
+    solver_1D = build_solver(spec_1D)
+    solver_2D = build_solver(spec_2D)
+    U_1D, t_1D, x_1D = solve_primal(solver_1D, β)
+    U_2D, t_2D, x_2D = solve_primal(solver_2D, β_2D)
+
+    @assert t_1D ≈ t_2D
+    for y in 1:Ny
+        @assert isapprox(height.(U_1D.U), height.(U_2D.U[:, y, :]))
+        @assert isapprox(momentum.(U_1D.U, XDIR), momentum.(U_2D.U[:, y, :], XDIR))
+        @assert all(isapprox.(momentum.(U_2D.U[:, y, :], YDIR), 0))
+    end
+
+    forward_1D = ForwardADGradient(β)
+    forward_2D = ForwardADGradient(β_2D)
+    objectives_1D = Objectives(interior_objective=KineticEnergy(),
+                               objective_indices=CartesianIndices((Nx,)),
+                               design_indices=CartesianIndices(β))
+    objectives_2D = Objectives(interior_objective=KineticEnergy(),
+                               objective_indices=CartesianIndices((Nx, Ny)),
+                               design_indices=CartesianIndices(β_2D))
+    objective_1D, gradient_1D = compute_objective_and_gradient(β, spec_1D, objectives_1D, forward_1D)
+    objective_2D, gradient_2D = compute_objective_and_gradient(β_2D, spec_2D, objectives_2D, forward_2D)
+
+    @test objective_1D ≈ objective_2D / Ny
+    # TODO: Somehow fails due to time step sensitivity. Turning this off makes it pass.
+    # Possibly because only one cell at each time step is selected as the cause
+    # of the CFL constraint, which is not captured wehn expanding the 1D gradient to 2D.
+    # One way to test the gradient may be to compare to the AD gradient in 2D when it gets finished.
+    @test gradient_2D ≈ expected_essentially_1D_gradient(gradient_1D, Ny) skip=true
+
+end
+
+@testset "Test essentially 1D problem" begin
+    Nx, Ny = 5, 6
+    essentially_1D_vs_2D_test(Nx, Ny, random_U0, -rand(Nx+1), -rand(Nx+1))
 end

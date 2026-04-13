@@ -17,6 +17,7 @@ function assert_correct_dimensions(U0, b, grid)
 end
 
 """
+    PrimalSWEProblem(U0, T, grid; initial_bathymetry=zeros(grid.N))
     PrimalSWEProblem(N, U0, T; initial_bathymetry=zeros(N + 1), domain=[0.0 1.0])
 A data structure representing the primal shallow water equations parameters.
 """

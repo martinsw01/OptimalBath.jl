@@ -18,7 +18,8 @@ struct Elevation <: HeightReference end
 const State = SVector
 
 height(U::State) = U[1]
-momentum(U::State, dir=1) = U[dir+1]
+momentum(U::State, ::Val{dir}=XDIR) where dir = momentum(U, dir)
+momentum(U::State, dir) = U[dir+1]
 
 struct States{VT, HR, A}
     U::A
@@ -40,51 +41,38 @@ end
 const AverageDepthStates{A} = States{Average, Depth, A}
 const AverageElevationStates{A} = States{Average, Elevation, A}
 
-function side(b, ::Type{Left})
-    return @view b[1:end-1]
-end
-
-function side(b, ::Type{Right})
-    return @view b[2:end]
-end
-
 function unsafe_to_depth!(U::States{S, Elevation, A}, b) where {S, A}
     V = States{S, Depth}(U.U)
     to_depth!(V, U, b)
     return V
 end
 
-function compute_new_depth(U::State, b::T) where {T}
+function compute_new_depth(U::State{2}, b::T) where {T}
     h = height(U)
     p = momentum(U)
     h_depth = max(h - b, zero(T))
-    # h_depth = h - b
     return State(h_depth, p)
 end
 
-function compute_new_depth(U, bl::T, br::T) where {T}
-    compute_new_depth(U, 0.5 * (bl + br))
+function compute_new_depth(U::State{3}, b::T) where {T}
+    h = height(U)
+    px = momentum(U, XDIR)
+    py = momentum(U, YDIR)
+    h_depth = max(h - b, zero(T))
+    return State(h_depth, px, py)
 end
 
 function compute_new_height(U, b)
-    h_depth, p = U
-    return State(h_depth + b, p)
-end
-
-function compute_new_height(U, bl, br)
-    compute_new_height(U, 0.5 * (bl + br))
-end
-
-function to_depth!(U::States{Average, Depth, A},
-                   V::States{Average, Elevation, AA},
-                   b) where {A, AA}
-    U.U .= compute_new_depth.(V.U, side(b, Left), side(b, Right))
+    h_depth = height(U)
+    return setindex(U, h_depth + b, 1)
 end
 
 function to_depth!(U::States{S, Depth, A},
                    V::States{S, Elevation, AA},
                    b) where {S, A, AA}
-    U.U .= compute_new_depth.(V.U, side(b, S))
+    for j in CartesianIndices(U.U)
+        U.U[j] = compute_new_depth(V.U[j], b_at(S, b, j, XDIR))
+    end
 end
 
 function promote_float_type(U::States, b)
@@ -105,16 +93,12 @@ function to_elevation(U::States{VT, Depth, A}, b) where {VT, A}
     return U_elevation
 end
 
-function to_elevation!(U::States{Average, Elevation},
-                       V::States{Average, Depth},
-                       b)
-    U.U .= compute_new_height.(V.U, side(b, Left), side(b, Right))
-end
-
 function to_elevation!(U::States{S, Elevation},
                          V::States{S, Depth},
                          b) where S
-    U.U .= compute_new_height.(V.U, side(b, S))
+    for j in CartesianIndices(U.U)
+        U.U[j] = compute_new_height(V.U[j], b_at(S, b, j, XDIR))
+    end
 end
 
 function unsafe_to_elevation!(U::States{S, Depth}, b) where S
@@ -126,11 +110,10 @@ end
 function adjust_to_bathymetry_changes!(U::States{Average, HR},
                                        V::States{Average, HR},
                                        β) where HR
-    float_type = eltype(eltype(U.U))
-    h = similar(U.U, float_type)
-    h .= height.(V.U)
-    h .+= 0.5 .* (side(β, Left) .+ side(β, Right))
-    U.U .= State.(h, momentum.(V.U))
+    for j in CartesianIndices(U.U)
+        h = height(V.U[j]) + b_at(Average, β, j)
+        U.U[j] = setindex(V.U[j], h, 1)
+    end
 end
 
 function adjust_to_bathymetry_changes!(U::States{Average}, β)

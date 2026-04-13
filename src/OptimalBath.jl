@@ -7,6 +7,7 @@ include("grids.jl")
 include("solver_options.jl")
 
 include("PrimalSWE.jl")
+include("smooth_reconstructions.jl")
 include("gradients/gradients.jl")
 include("solver.jl")
 include("objectives.jl")

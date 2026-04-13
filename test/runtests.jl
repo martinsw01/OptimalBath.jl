@@ -38,6 +38,10 @@ using Test
     @testset "Discrete adjoint consistency tests" begin
         include("discrete_adjoint_test.jl")
     end
+
+    @testset "Bathymetry selection tests" begin
+        include("bathymetry_tests.jl")
+    end
 end
 
 nothing

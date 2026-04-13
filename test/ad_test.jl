@@ -132,7 +132,7 @@ function compare_objectives(timestepper::TimeStepper)
     gradient_type = TestADGradient()
     objective, _ = OptimalBath.compute_objective_and_gradient(β, spec, objectives, gradient_type)
 
-    expected_objective = compute_objective(U, t, x, β, objectives, timestepper)
+    expected_objective = compute_objective(U, t, 0.1, β, objectives, timestepper)
 
     @test objective ≈ expected_objective
 end

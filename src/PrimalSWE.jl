@@ -63,32 +63,46 @@ function desingularize(h, p, solver::VolumeFluxesSolver)
     return VolumeFluxes.desingularize(solver.simulator.system.equation, h, p)
 end
 
-function create_grid(problem, reconstruction)
-    return _create_grid(problem.N, problem.domain, reconstruction)
+function create_VF_grid(problem, reconstruction)
+    return _create_VF_grid(problem.grid.N, problem.grid.domain, reconstruction)
 end
 
-function _create_grid(N, domain, ::LinearReconstruction)
-    return _create_grid(N, domain, 2)
+function _create_VF_grid(N, domain, ::LinearReconstruction)
+    return _create_VF_grid(N, domain, 2)
 end
 
-function _create_grid(N, domain, ::NoReconstruction)
-    return _create_grid(N, domain, 1)
+function _create_VF_grid(N, domain, ::NoReconstruction)
+    return _create_VF_grid(N, domain, 1)
 end
 
-function _create_grid(N, domain, gc)
+function _create_VF_grid(N, domain, gc)
+    # return VolumeFluxes.CartesianGrid(N...; gc=gc, boundary=VolumeFluxes.PeriodicBC(), extent = domain)
     return VolumeFluxes.CartesianGrid(N...; gc=gc, boundary=VolumeFluxes.WallBC(), extent = domain)
 end
 
+function assign_interior_bathymetry!(VF_b::AbstractVector, b, gc)
+    VF_b[gc+1:end-gc] .= b
+end
+
+function assign_interior_bathymetry!(VF_b::AbstractMatrix, b, gc)
+    VF_b[gc+1:end-gc, gc+1:end-gc] .= b
+end
+
 @views function extrapolate_bathymetry(initial_bathymetry, float_type, gc)
-    b = similar(initial_bathymetry, float_type, length(initial_bathymetry) + 2*gc)
-    b[gc+1:end-gc] .= initial_bathymetry
+    b = similar(initial_bathymetry, float_type, size(initial_bathymetry) .+ 2*gc)
+    assign_interior_bathymetry!(b, initial_bathymetry, gc)
     update_bc!(b, gc)
     return b
 end
 
-@views function update_bc!(bathymetry, gc)
+@views function update_bc!(bathymetry::AbstractVector, gc)
     bathymetry[1:gc] .= bathymetry[2gc+1:-1:gc+2]
     bathymetry[end-gc+1:end] .= bathymetry[end-gc-1:-1:end-2gc]
+end
+
+@views function update_bc!(bathymetry::AbstractMatrix, gc)
+    update_bc!.(eachcol(bathymetry), gc)
+    update_bc!.(eachrow(bathymetry), gc)
 end
 
 
@@ -105,16 +119,23 @@ function make_bathymetry(problem, reconstruction, float_type)
 end
 
 
-function construct_equation(problem, reconstruction, backend, grid)
+function construct_equation(problem, reconstruction, backend, grid::VolumeFluxes.Grid{1})
     b = make_bathymetry(problem, reconstruction, backend.realtype)
     bathymetry = VolumeFluxes.BottomTopography1D(b, backend, grid)
     equation = VolumeFluxes.ShallowWaterEquations1D(bathymetry)
     return equation
 end
 
+function construct_equation(problem, reconstruction, backend, grid::VolumeFluxes.Grid{2})
+    b = make_bathymetry(problem, reconstruction, backend.realtype)
+    bathymetry = VolumeFluxes.BottomTopography2D(b, backend, grid)
+    equation = VolumeFluxes.ShallowWaterEquations(bathymetry)
+    return equation
+end
+
 function create_simulator(problem, reconstruction, timestepper, bathymetry_source, float_type)
     cpu_backend = VolumeFluxes.make_cpu_backend(float_type)
-    grid = create_grid(problem, reconstruction)
+    grid = create_VF_grid(problem, reconstruction)
     equation = construct_equation(problem, reconstruction, cpu_backend, grid)
     numericalflux = VolumeFluxes.CentralUpwind(equation)
     conserved_system = VolumeFluxes.ConservedSystem(cpu_backend, to_VF(reconstruction), numericalflux, equation, grid, [to_VF(bathymetry_source)])
@@ -122,13 +143,28 @@ function create_simulator(problem, reconstruction, timestepper, bathymetry_sourc
     return simulator
 end
 
+
+function allocate_new_states(U::ElasticArray{T, 3}) where T
+    resize!(U, size(U, 1), size(U, 2), size(U, 3)+1)
+    return @view U[:, :, size(U,3)]
+end
+
+function allocate_new_states(U::ElasticArray{T, 2}) where T
+    resize!(U, size(U, 1), size(U, 2)+1)
+    return @view U[:, size(U,2)]
+end
+
 function recording_averages_callback(solver, t0)
+    grid = solver.problem.grid
     U0 = VolumeFluxes.current_interior_state(solver.simulator)
-    U = States{Average, Elevation}(ElasticMatrix(reshape(U0, :, 1)))
+    U = States{Average, Elevation}(ElasticArray(reshape(U0, grid.N..., 1)))
     t = ElasticVector([t0])
 
     record_state = create_callback(solver) do U_n, t_n, Δt
-        append!(U.U, U_n.U)
+        U_allocated = allocate_new_states(U.U)
+        for i in CartesianIndices(U_n.U)
+            U_allocated[i] = U_n.U[i]
+        end
         append!(t, t_n)
     end
 
@@ -137,10 +173,11 @@ end
 
 
 function recording_reconstructions_callback(simulator, t0)
+    grid = simulator.system.grid
     Ul0 = simulator.system.left_buffer[3:end-2]
     Ur0 = simulator.system.right_buffer[3:end-2]
-    Ul = States{Left, Depth}(ElasticMatrix(reshape(Ul0, :, 1)))
-    Ur = States{Right, Depth}(ElasticMatrix(reshape(Ur0, :, 1)))
+    Ul = States{Left, Depth}(ElasticMatrix(reshape(Ul0, grid.N..., 1)))
+    Ur = States{Right, Depth}(ElasticMatrix(reshape(Ur0, grid.N..., 1)))
     t = ElasticVector([t0])
     function record_state(t_n, simulator)
         append!(Ul.U, simulator.system.left_buffer[3:end-2])
@@ -155,7 +192,7 @@ function recording_callback(solver::VolumeFluxesSolver{S,P, NoReconstruction, TS
 end
 
 function recording_callback(solver::VolumeFluxesSolver{S,P, R, TS, BS, F}, t0) where {S, P, R<:LinearReconstruction, TS, BS, F}
-    return recording_averages_callback(solver, t0) #recording_reconstructions_callback(solver.simulator, t0)
+    return recording_reconstructions_callback(solver.simulator, t0)
 end
 
 function create_callback(f, ::VolumeFluxesSolver)
@@ -176,26 +213,46 @@ function get_bathymetry(simulator)
 end
 
 function get_bathymetry(solver::VolumeFluxesSolver)
-    gc = ghost_cells(solver.simulator)
-    return @views get_bathymetry(solver.simulator)[gc+1:end-gc]
+    return get_bathymetry(solver.problem.grid, solver.simulator)
+end
+
+function get_bathymetry(::Grid{1}, simulator)
+    gc = ghost_cells(simulator)
+    return @view get_bathymetry(simulator)[gc+1:end-gc]
+end
+
+function get_bathymetry(::Grid{2}, simulator)
+    gc = ghost_cells(simulator)
+    return @view get_bathymetry(simulator)[gc+1:end-gc, gc+1:end-gc]
 end
 
 @views function update_bathymetry!(simulator, problem, β)
     gc = ghost_cells(simulator)
     b = get_bathymetry(simulator)
-    b[gc+1:end-gc] .= problem.initial_bathymetry .+ β
+    assign_interior_bathymetry!(b, problem.initial_bathymetry .+ β, gc)
     update_bc!(b, gc)
-end
+end    
 
 function set_initial_state!(simulator, problem, β)
     U0 = problem.U0.U
-    U0_volume_fluxes = VolumeFluxes.current_interior_state(simulator)
-    for i in eachindex(U0)
-        β_i = 0.5 * (β[i] + β[i+1])
-        U0_volume_fluxes[i] = U0[i] + State(β_i, 0)
+    U0_VF = VolumeFluxes.current_interior_state(simulator)
+    for i in CartesianIndices(U0)
+        β_i = b_at(Average, β, i)
+        U0_VF[i] = add_bathymetry_change(U0[i], β_i)
+        # add_bathymetry_change!(U0_VF, U0, i, β_i)
     end
     VolumeFluxes.update_bc!(simulator, VolumeFluxes.current_state(simulator))
 end
+
+function add_bathymetry_change(U::State{2}, β_i)
+    h, p = U
+    return State(h + β_i, p)
+end
+
+function add_bathymetry_change(U::State{3}, β_i)
+    h, p_x, p_y = U
+    return State(h + β_i, p_x, p_y)
+end     
 
 function reset_time!(simulator)
     simulator.t[1] = zero(eltype(simulator.t))
@@ -225,7 +282,7 @@ function solve_primal(solver::VolumeFluxesSolver, β, callback)
 end
 
 function compute_Δx(solver::VolumeFluxesSolver)
-    return VolumeFluxes.compute_dx(solver.simulator.system.grid)
+    return solver.problem.grid.Δx
 end
 
 function initial_state(solver::VolumeFluxesSolver)

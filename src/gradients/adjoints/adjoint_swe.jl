@@ -2,12 +2,8 @@ export AdjointSWE, solve_adjoint
 
 abstract type AdjointSWE end
 
-function compute_ghost_cell(U::State{1}, dir)
-    return typeof(U)(U[1], -U[2])
-end
-
-function compute_ghost_cell(U)
-    typeof(U)(U[1], -U[2])
+function compute_ghost_cell(U::State, ::Val{dir}=XDIR) where dir
+    setindex(U, -momentum(U, dir), 1+dir)
 end
 
 
@@ -21,7 +17,7 @@ function solve_adjoint end
 function add_objective_source!(Λ, U, Δt, Δx, objectives::Objectives, weight=1.0)
     indices = objectives.objective_indices
     objective = objectives.interior_objective
-    Λ[indices] .+= weight * objective_density_gradient.(objective, @view U[indices]) * Δt * Δx
+    Λ[indices] .+= weight * objective_density_gradient.(objective, @view U[indices]) * Δt * prod(Δx)
 end
 
 function add_objective_source!(Λ, Ul, Ur, Δt, Δx, objectives::Objectives)

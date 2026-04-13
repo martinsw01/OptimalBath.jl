@@ -53,14 +53,10 @@ end
 function compute_adjoint_ghost_cell(Λ_interior, Λ, U_interior)
     h = U_interior[1]
     if h > 0
-        return compute_ghost_cell(Λ_interior, Λ)
+        return compute_ghost_cell(Λ_interior)
     else
         return copy(Λ_interior)
     end
-end
-
-function compute_ghost_cell(U_interior, U)
-    return @SVector [U_interior[1], -U_interior[2]]
 end
 
 """
@@ -81,13 +77,13 @@ end
 
 function compute_next_Λ_left_boundary(Λc, Λr, Uc, Ur, bl, br, Δt, Δx)
     Λl = compute_adjoint_ghost_cell(Λc, Λr, Uc)
-    Ul = compute_ghost_cell(Uc, Ur)
+    Ul = compute_ghost_cell(Uc)
     return compute_next_Λ(Λl, Λc, Λr, Ul, Uc, Ur, bl, br, Δt, Δx)
 end
 
 function compute_next_Λ_right_boundary(Λl, Λc, Ul, Uc, bl, br, Δt, Δx)
     Λr = compute_adjoint_ghost_cell(Λc, Λl, Uc)
-    Ur = compute_ghost_cell(Uc, Ul)
+    Ur = compute_ghost_cell(Uc)
     return compute_next_Λ(Λl, Λc, Λr, Ul, Uc, Ur, bl, br, Δt, Δx)
 end
 
@@ -204,14 +200,14 @@ end
 function compute_next_Λ_left_boundary(Λc, Λr, Uc⁻, Ur⁻, Uc⁺, bl, br, Δt, Δx)
     Λl = compute_adjoint_ghost_cell(Λc, Λr, Uc⁻)
     # Λl = compute_ghost_cell(Λc, nothing) #compute_adjoint_ghost_cell(Λc, Λr, Uc⁻)
-    Ul⁺ = compute_ghost_cell(Uc⁻, nothing)
+    Ul⁺ = compute_ghost_cell(Uc⁻)
     return compute_next_Λ(Λl, Λc, Λr, Uc⁻, Ur⁻, Ul⁺, Uc⁺, bl, br, Δt, Δx)
 end
 
 function compute_next_Λ_right_boundary(Λl, Λc, Uc⁻, Ul⁺, Uc⁺, bl, br, Δt, Δx)
     Λr = compute_adjoint_ghost_cell(Λc, Λl, Uc⁺)
     # Λr = compute_ghost_cell(Λc, nothing) #compute_ghost_cell(Λc, nothing)
-    Ur⁻ = compute_ghost_cell(Uc⁺, nothing)
+    Ur⁻ = compute_ghost_cell(Uc⁺)
     return compute_next_Λ(Λl, Λc, Λr, Uc⁻, Ur⁻, Ul⁺, Uc⁺, bl, br, Δt, Δx)
 end
 
