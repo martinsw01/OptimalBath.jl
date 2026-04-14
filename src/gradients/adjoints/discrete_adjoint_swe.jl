@@ -122,7 +122,7 @@ function compute_timestep_source(Λ_next, U_next, U_prev, μ_final, J_final, Δt
     i_min, dir_min = determine_direction_and_timestep_index(U_prev, CFL, grid, da)
     τ = compute_timestep_gradient(CFL, get_Δx(grid, dir_min), U_prev[i_min], dir_min, da)
     μ_step = compute_timestep_correction(Λ_next, U_prev, U_next, Δt)
-    J_step = compute_objective_step(U_prev, get_Δx(grid, dir_min), objectives)
+    J_step = compute_objective_step(U_prev, grid.Δx, objectives)
     Δμ = μ_step - μ_final
     ΔJ = J_step - J_final
     return i_min, (Δμ + ΔJ) * τ
@@ -137,7 +137,7 @@ function add_objective_timestep_source!(Λ_prev, U_prev, J_final, CFL, objective
     i_dir, dir = determine_direction_and_timestep_index(U_prev, CFL, da.grid, da)
     Δx = get_Δx(da.grid, dir)
     τ = compute_timestep_gradient(CFL, Δx, U_prev[i_dir], dir, da)
-    J_step = compute_objective_step(U_prev, Δx, objectives)
+    J_step = compute_objective_step(U_prev, da.grid.Δx, objectives)
     ΔJ = J_step - J_final
     Λ_prev[i_dir] += ΔJ * τ
 end
@@ -228,7 +228,7 @@ function add_bottom_source!(Λ, Λ_pp, n, t, b, dir, grid, ::Type{DefaultBathyme
     for_each_cell(grid) do j
         Δb = b_at(Right, b, j, dir) - b_at(Left, b, j, dir)
         S12 = -9.81 * Δb * Δt / Δx
-        Λ[j, n-1] += setindex(zero(Λ[j, n-1]), S12 * momentum(Λ_pp[j]), 1)
+        Λ[j, n-1] += setindex(zero(Λ[j, n-1]), S12 * momentum(Λ_pp[j], dir), 1)
     end
 end
 
