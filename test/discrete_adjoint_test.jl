@@ -198,22 +198,3 @@ end
         compare_to_ad(N, post_proc_affected_U0, range(0, 0.01, N+1), zeros(N+1))
     end
 end
-
-function essentially_1D_problem(problem_1D::PrimalSWEProblem, β_1D, Ny)
-    N = (problem_1D.grid.N[1], Ny)
-    grid_2D = Grid2D(N; domain=[0. 1.; 0. Ny])
-    U0_2D = [State(h, hu, 0.) for (h, hu) in problem_1D.U0.U, _ in 1:Ny]
-    U0_2D = States{Average, Elevation}(U0_2D)
-    initial_bathymetry_2D = repeat(problem_1D.initial_bathymetry, 1, Ny+1)
-    problem_2D = PrimalSWEProblem(U0_2D, problem_1D.T, grid_2D, initial_bathymetry_2D)
-
-    β_2D = repeat(β_1D, 1, Ny+1)
-    return problem_2D, β_2D
-end
-
-function expected_essentially_1D_gradient(gradient_1D, Ny)
-    gradient_2D = repeat(gradient_1D, 1, Ny+1)
-    gradient_2D[:,1] .*= 0.5
-    gradient_2D[:,end] .*= 0.5
-    return gradient_2D
-end

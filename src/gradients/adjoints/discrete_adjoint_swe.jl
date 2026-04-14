@@ -182,22 +182,22 @@ function add_flux_jvp_right_boundary!(Λl, Λc, Ul, Uc, Δt, Δx, dir, da::Discr
     return left' * Λl + center' * Λc
 end
 
-function add_flux_jvp!(Λ, Λ_pp, U, n, Δt, dir, grid, da::DiscreteAdjointSWE)
+function add_flux_jvp!(Λ, U, n, Δt, dir, grid, da::DiscreteAdjointSWE)
     Δx = get_Δx(grid, dir)
     for_each_left_boundary_directional_stencil(dir, grid) do center, right
-        Λ[center, n-1] += add_flux_jvp_left_boundary!(Λ_pp[center], Λ_pp[right],
+        Λ[center, n-1] += add_flux_jvp_left_boundary!(Λ[center, n], Λ[right, n],
                                                       U[center, n-1], U[right, n-1],
                                                       Δt, Δx, dir, da)
     end
 
     for_each_interior_directional_stencil(dir, grid) do left, center, right
-        Λ[center, n-1] += add_flux_jvp_interior!(Λ_pp[left], Λ_pp[center], Λ_pp[right],
+        Λ[center, n-1] += add_flux_jvp_interior!(Λ[left, n], Λ[center, n], Λ[right, n],
                                                  U[left, n-1], U[center, n-1], U[right, n-1],
                                                  Δt, Δx, dir, da)
     end
 
     for_each_right_boundary_directional_stencil(dir, grid) do left, center
-        Λ[center, n-1] += add_flux_jvp_right_boundary!(Λ_pp[left], Λ_pp[center],
+        Λ[center, n-1] += add_flux_jvp_right_boundary!(Λ[left, n], Λ[center, n],
                                                        U[left, n-1], U[center, n-1],
                                                        Δt, Δx, dir, da)
     end
@@ -218,17 +218,17 @@ function bottom_source_type(::DiscreteAdjointSWE{<:PrimalSWESolver{R, TS, Bottom
     return BottomSourceType
 end
 
-function add_bottom_source!(Λ, Λ_pp, n, t, b, dir, grid, da::DiscreteAdjointSWE)
-    add_bottom_source!(Λ, Λ_pp, n, t, b, dir, grid, bottom_source_type(da))
+function add_bottom_source!(Λ, n, t, b, dir, grid, da::DiscreteAdjointSWE)
+    add_bottom_source!(Λ, n, t, b, dir, grid, bottom_source_type(da))
 end
 
-function add_bottom_source!(Λ, Λ_pp, n, t, b, dir, grid, ::Type{DefaultBathymetrySource})
+function add_bottom_source!(Λ, n, t, b, dir, grid, ::Type{DefaultBathymetrySource})
     Δt = t[n] - t[n-1]
     Δx = get_Δx(grid, dir)
     for_each_cell(grid) do j
         Δb = b_at(Right, b, j, dir) - b_at(Left, b, j, dir)
         S12 = -9.81 * Δb * Δt / Δx
-        Λ[j, n-1] += setindex(zero(Λ[j, n-1]), S12 * momentum(Λ_pp[j], dir), 1)
+        Λ[j, n-1] += setindex(zero(Λ[j, n]), S12 * momentum(Λ[j, n], dir), 1)
     end
 end
 
@@ -236,14 +236,12 @@ function zero_momentum_state(Λ::State)
     return setindex(zero(Λ), height(Λ), 1)
 end
 
-function adjoint_pre_proc_step!(Λ_pp, Λ, U, n, grid, da)
+function adjoint_pre_proc_step!(Λ, U, n, grid, da)
     OptimalBath.for_each_cell(grid) do j
         if height(U[j, n]) < depth_cutoff(da.primal)
-            Λ_pp[j] = zero_momentum_state(Λ[j, n])
-        else
-            Λ_pp[j] = Λ[j, n]
+            Λ[j, n] = zero_momentum_state(Λ[j, n])
         end
-        Λ[j, n-1] = Λ_pp[j]
+        Λ[j, n-1] = Λ[j, n]
     end
 end
 
@@ -255,7 +253,6 @@ end
 @views function solve_adjoint(Λ_end, U::AverageDepthStates, objectives::Objectives, b, t, Δx, da::DiscreteAdjointSWE)
     U = U.U
     Λ = similar(U)
-    Λ_pp = similar(Λ_end)
 
     grid = da.grid
     Δx = grid.Δx
@@ -269,10 +266,10 @@ end
     dir = 1
     for n in M:-1:2
         Δt = t[n] - t[n-1]
-        adjoint_pre_proc_step!(Λ_pp, Λ, U, n, grid, da)
+        adjoint_pre_proc_step!(Λ, U, n, grid, da)
         for dir in directions(grid)
-            add_flux_jvp!(Λ, Λ_pp, U, n, Δt, dir, grid, da)
-            add_bottom_source!(Λ, Λ_pp, n, t, b, dir, grid, da)
+            add_flux_jvp!(Λ, U, n, Δt, dir, grid, da)
+            add_bottom_source!(Λ, n, t, b, dir, grid, da)
         end
         add_objective_source!(time_frame(Λ, n-1), time_frame(U, n-1), Δt, Δx, objectives, da)
         if n < M

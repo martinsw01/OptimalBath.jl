@@ -18,23 +18,12 @@ end
 
 function compute_gradient!(G, Λ, U::AverageDepthStates, β, t, Δx, objectives::Objectives, da::DiscreteAdjointSWE)
     ForwardDiff.gradient!(G, objectives.regularization, β)
-    gradient_pre_proc_step!(Λ, U.U, da)
     add_bottom_source_gradient_contribution!(G, Λ, U.U, t, objectives.design_indices, da)
 end
 
 @views function integrate_gradient(U, Λ, t, dir, grid::Grid)
     Δx = grid.Δx[dir]
     return sum(momentum.(Λ[2:end], dir) .* height.(U[1:end-1]) .* diff(t)) * 9.81 / Δx
-end
-
-function gradient_pre_proc_step!(Λ, U, da::DiscreteAdjointSWE)
-    for n in axes(U, ndims(U))[1:end-1]
-        OptimalBath.for_each_cell(da.grid) do j
-            if height(U[j, n]) < depth_cutoff(da.primal)
-                Λ[j, n+1] = zero_momentum_state(Λ[j, n+1])
-            end
-        end
-    end
 end
 
 function add_bottom_source_gradient_contribution!(G, Λ, U, t, design_indices, da::DiscreteAdjointSWE)
