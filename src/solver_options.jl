@@ -11,24 +11,28 @@ struct SolverOptions{R<:Reconstruction, TS<:TimeStepper, BS<:BathymetrySourceTer
     end
 end
 
-function assert_correct_sizes(N, U0, initial_bathymetry)
-    @assert length(initial_bathymetry) == N + 1 "Bathymetry must have length N+1=$(N + 1) ≠ $(length(initial_bathymetry))"
-    @assert size(U0.U, 1) == N "Initial states must have size N=$(N) in the first dimension, but got $(size(U0.U, 1))"
+function assert_correct_dimensions(U0, b, grid)
+    @assert size(b) == grid.N .+ 1 "Bathymetry must have length $(grid.N .+ 1) but got $(length(b))"
+    @assert size(U0.U) == grid.N "Initial states must have size $(grid.N) but got $(size(U0.U))"
 end
 
 """
+    PrimalSWEProblem(U0, T, grid; initial_bathymetry=zeros(grid.N))
     PrimalSWEProblem(N, U0, T; initial_bathymetry=zeros(N + 1), domain=[0.0 1.0])
 A data structure representing the primal shallow water equations parameters.
 """
-struct PrimalSWEProblem{Bathymetry, FloatType, InitialStates<:AverageElevationStates, Domain}
+struct PrimalSWEProblem{Bathymetry, FloatType, InitialStates<:AverageElevationStates, GridType}
     initial_bathymetry::Bathymetry
     T::FloatType
     U0::InitialStates
-    domain::Domain
-    N::Int64
+    grid::GridType
+    function PrimalSWEProblem(U0, T, grid::Grid, initial_bathymetry=zeros(grid.N))
+        assert_correct_dimensions(U0, initial_bathymetry, grid)
+        return new{typeof(initial_bathymetry), typeof(T), typeof(U0), typeof(grid)}(initial_bathymetry, T, U0, grid)
+    end
     function PrimalSWEProblem(N, U0, T; initial_bathymetry=zeros(N + 1), domain=[0.0 1.0])
-        assert_correct_sizes(N, U0, initial_bathymetry)
-        return new{typeof(initial_bathymetry), typeof(T), typeof(U0), typeof(domain)}(initial_bathymetry, T, U0, domain, N)
+        grid = Grid1D(N; domain=domain)
+        return PrimalSWEProblem(U0, T, grid, initial_bathymetry)
     end
 end
 

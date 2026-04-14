@@ -5,7 +5,7 @@ using StaticArrays, Test
 struct MockBackend <: SolverBackend end
 
 function build_solver(spec::SolverSpec{P, MockBackend, SO}, float_type) where {P, SO}
-    return MockSolver(spec.problem.N, spec.solver_options.reconstruction, float_type)
+    return MockSolver(spec.problem.grid.N[1], spec.solver_options.reconstruction, float_type)
 end
 
 struct MockSolver{R<:Reconstruction} <: PrimalSWESolver{R, ForwardEuler, DefaultBathymetrySource}

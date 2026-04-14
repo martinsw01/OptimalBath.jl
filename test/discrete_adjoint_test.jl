@@ -8,7 +8,7 @@ end
 
 function unflatten(u_flat)
     N = length(u_flat) ÷ 2
-    [State(u_flat[2i-1:2i]) for i in 1:N]
+    [State{2}(u_flat[2i-1:2i]) for i in 1:N]
 end
 
 function unflatten(u_flat, N)
@@ -54,14 +54,14 @@ end
 
 function adjoint_dot_test(N, compute_U0, bathymetry)
     U0 = compute_U0(N)
-    δU0 = rand(State{Float64}, N)
+    δU0 = rand(State{2, Float64}, N)
     U, δU, t, solver = tangent_linear_model(N, U0.U, δU0, bathymetry)
 
     U = unsafe_to_depth!(U, bathymetry)
     β = zeros(N+1)
 
     objectives = Objectives()
-    Λ0 = rand(State{Float64}, N)
+    Λ0 = rand(State{2, Float64}, N)
     Δx = 1/N
 
     Λ = solve_adjoint(Λ0, U, objectives, bathymetry, t, Δx, DiscreteAdjointSWE(solver))
@@ -84,7 +84,7 @@ function compute_perturbation_with_nonzero_objective(Λ, U, δU, Δx, t, objecti
         fill!(Λ_temp, zero(eltype(U)))
         OptimalBath.add_objective_source!(Λ_temp, U[:, n-1], Δt, Δx, objectives)
         if n < M
-            OptimalBath.DiscreteAdjoints.add_objective_timestep_source!(Λ_temp, U[:, n-1], J_final, Δx, 0.25, objectives, da)
+            OptimalBath.DiscreteAdjoints.add_objective_timestep_source!(Λ_temp, U[:, n-1], J_final, 0.25, objectives, da)
         end
         δJ += dot(δU[:, n-1], Λ_temp)
     end
@@ -94,13 +94,13 @@ end
 function general_adjoint_dot_test(N, compute_U0, bathymetry)
     U0 = compute_U0(N)
     β = zeros(N+1)
-    δU0 = rand(State{Float64}, N)
+    δU0 = rand(State{2, Float64}, N)
     U, δU, t, solver = tangent_linear_model(N, U0.U, δU0, bathymetry)
 
     U = unsafe_to_depth!(U, bathymetry)
     β = zeros(N+1)
     objectives = Objectives(interior_objective=KineticEnergy())
-    Λ0 = rand(State{Float64}, N)
+    Λ0 = rand(State{2, Float64}, N)
     Δx = 1/N
     da = DiscreteAdjointSWE(solver)
     Λ = solve_adjoint(Λ0, U, objectives, bathymetry, t, Δx, da)
@@ -128,16 +128,34 @@ function compare_to_ad(N, compute_U0, initial_bathymetry, β)
     @test forward_ad_gradient ≈ da_gradient
 end
 
+function compare_to_2D_ad(N, compute_U0, initial_bathymetry, β)
+    U0 = compute_U0(N)
+    grid = Grid2D(N)
+    problem = PrimalSWEProblem(U0, 0.1, grid, initial_bathymetry)
+    spec = SolverSpec(problem, VolumeFluxesBackend())
+    objectives = Objectives(
+        interior_objective=KineticEnergy(),
+        terminal_objective=KineticEnergy(),
+        objective_indices=CartesianIndices(N),
+        design_indices=CartesianIndices(N .+ 1),
+    )
+    forward_ad = ForwardADGradient(β)
+    discrete_adjoint = DiscreteAdjointGradient()
+    da_objective, da_gradient = compute_objective_and_gradient(β, spec, objectives, discrete_adjoint)
+    forward_ad_objective, forward_ad_gradient = compute_objective_and_gradient(β, spec, objectives, forward_ad)
+    @test da_objective ≈ forward_ad_objective
+    @test forward_ad_gradient ≈ da_gradient
+end
+
 function random_U0(N)
-    U0 = rand(State{Float64}, N)
+    dims = length(N)
+    U0 = rand(State{dims+1, Float64}, N)
     return States{Average, Elevation}(U0)
 end
 
 function post_proc_affected_U0(N)
     U0 = fill(State(0.2, 1.), N)
-    U0[1] = State(0.01, 1.)
-    U0[4] = State(0.5e-5, 0.)
-    U0[6] = State(0., 0.)
+    U0[1] = State(5e-3, 1.)
     return States{Average, Elevation}(U0)
 end
 
@@ -164,14 +182,19 @@ end
     @testset "Random bathymetry" begin
         compare_to_ad(N, random_U0, -rand(N+1), rand(N+1))
     end
+    @testset "Two dimensions" begin
+        N = (5, 7)
+        compare_to_2D_ad(N, random_U0, -rand(N .+ 1...), -rand(N .+ 1...))
+    end
 end
 
 @testset "Test post-processing step" begin
-    N = 8
+    N = 3
     @testset "Adjoint consistency" begin
         adjoint_dot_test(N, post_proc_affected_U0, zeros(N+1))
     end
     @testset "Compare to AD" begin
         compare_to_ad(N, post_proc_affected_U0, zeros(N+1), zeros(N+1))
+        compare_to_ad(N, post_proc_affected_U0, range(0, 0.01, N+1), zeros(N+1))
     end
 end

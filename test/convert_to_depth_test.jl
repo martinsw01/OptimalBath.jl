@@ -3,11 +3,11 @@
     U = States{Average, Elevation}(fill(State(1, 2), N, M))
     b = ones(N + 1)
 
-    @assert eltype(U.U) === State{Int64}
+    @assert eltype(U.U) === State{2, Int64}
     @assert eltype(b) === Float64
 
     V = to_depth(U, b)
-    @test eltype(V.U) === State{Float64}
+    @test eltype(V.U) === State{2, Float64}
 end
 
 @testset "Test in-place conversion to depth" begin

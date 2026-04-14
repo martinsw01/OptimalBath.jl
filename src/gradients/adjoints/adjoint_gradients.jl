@@ -16,41 +16,45 @@ function adjoint_solver end
 function compute_gradient! end
 
 
+function time_frame(U, n)
+    return selectdim(U, ndims(U), n)
+end
+
 function compute_objective_and_gradient!(G, β, solver::PrimalSWESolver{NoReconstruction, TS, BS}, objectives::Objectives, ag::AdjointGradient) where {TS, BS}
-    δb = extrapolate_β_to_full_domain(β, objectives.design_indices, length(get_bathymetry(solver)))
+    δb = extrapolate_β_to_full_domain(β, objectives.design_indices, size(get_bathymetry(solver)))
     
     U, t, x = solve_primal(solver, δb)
     adjusted_bathymetry = get_bathymetry(solver)
     U = unsafe_to_depth!(U, adjusted_bathymetry)
 
-    Δx = x[2] - x[1]
-    Λ_end = zero(U.U[:, end])
-    Λ_end[objectives.objective_indices] .+= objective_density_gradient(objectives.terminal_objective, U, objectives.objective_indices, lastindex(t)) * Δx
+    Δx = compute_Δx(solver)
+    Λ_end = zero(time_frame(U.U, 1))
+    Λ_end[objectives.objective_indices] .+= objective_density_gradient(objectives.terminal_objective, U, objectives.objective_indices, lastindex(t)) .* prod(Δx)
 
     adjoint = adjoint_solver(solver, ag)
     Λ = solve_adjoint(Λ_end, U, objectives, adjusted_bathymetry, t, Δx, adjoint)
 
     compute_gradient!(G, Λ, U, β, t, Δx, objectives, adjoint)
-    objective = compute_objective(U, t, x, β, objectives, TS)
+    objective = compute_objective(U, t, Δx, β, objectives, TS)
     return objective
 end
 
 function compute_objective_and_gradient!(G, β, solver::PrimalSWESolver{R, TS, BS}, objectives::Objectives, ag::AdjointGradient) where {R<:LinearReconstruction, TS, BS}
-    δb = extrapolate_β_to_full_domain(β, objectives.design_indices, length(get_bathymetry(solver)))
+    δb = extrapolate_β_to_full_domain(β, objectives.design_indices, size(get_bathymetry(solver)))
 
     (Ul, Ur), t, x = solve_primal(solver, δb)
     adjusted_bathymetry = get_bathymetry(solver)
 
-    Δx = x[2] - x[1]
-    Λ_end = zero(Ul.U[:, end])
-    Λ_end[objectives.objective_indices] .+= 0.5 * objective_density_gradient(objectives.terminal_objective, Ul, objectives.objective_indices, lastindex(t))
-    Λ_end[objectives.objective_indices] .+= 0.5 * objective_density_gradient(objectives.terminal_objective, Ur, objectives.objective_indices, lastindex(t))
+    Δx = compute_Δx(solver)
+    Λ_end = zero(time_frame(Ul.U, 1))
+    Λ_end[objectives.objective_indices] .+= 0.5 * objective_density_gradient(objectives.terminal_objective, Ul, objectives.objective_indices, lastindex(t)) .* prod(Δx)
+    Λ_end[objectives.objective_indices] .+= 0.5 * objective_density_gradient(objectives.terminal_objective, Ur, objectives.objective_indices, lastindex(t)) .* prod(Δx)
 
     adjoint = adjoint_solver(solver, ag)
     Λ = solve_adjoint(Λ_end, Ul, Ur, objectives, adjusted_bathymetry, t, Δx, adjoint)
 
     compute_gradient!(G, Λ, Ul, Ur, t, Δx, objectives, ag)
-    objective = compute_objective(Ul, Ur, t, x, β, objectives, TS)
+    objective = compute_objective(Ul, Ur, t, Δx, β, objectives, TS)
     return objective
 end
 

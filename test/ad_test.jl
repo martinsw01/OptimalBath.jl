@@ -49,7 +49,7 @@ struct ObjectiveMockBackend <: SolverBackend
     x
     function ObjectiveMockBackend(N, M)
         initial_bathymetry = -rand(N + 1)
-        U = rand(State{Float64}, N, M)
+        U = rand(State{2, Float64}, N, M)
         t = [0.0; cumsum(rand(M - 1))] ./ M
         x = range(0.0, stop=1.0, length=N+1)
         return new(initial_bathymetry, U, t, x)
@@ -105,7 +105,7 @@ end
 function create_mock_spec(mock_backend, timestepper)
     N = size(mock_backend.U, 1)
     U0 = States{Average, Elevation}(mock_backend.U[:, 1])
-    problem = PrimalSWEProblem(N, U0, last(mock_backend.t); initial_bathymetry=mock_backend.initial_bathymetry, domain=nothing)
+    problem = PrimalSWEProblem(N, U0, last(mock_backend.t); initial_bathymetry=mock_backend.initial_bathymetry)
     return SolverSpec(problem, mock_backend, SolverOptions(NoReconstruction(), timestepper))
 end
 
@@ -132,7 +132,7 @@ function compare_objectives(timestepper::TimeStepper)
     gradient_type = TestADGradient()
     objective, _ = OptimalBath.compute_objective_and_gradient(β, spec, objectives, gradient_type)
 
-    expected_objective = compute_objective(U, t, x, β, objectives, timestepper)
+    expected_objective = compute_objective(U, t, 0.1, β, objectives, timestepper)
 
     @test objective ≈ expected_objective
 end

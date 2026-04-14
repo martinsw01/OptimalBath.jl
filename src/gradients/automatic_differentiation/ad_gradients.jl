@@ -20,8 +20,8 @@ function get_gradient end
 """
 function update_and_get_bathymetry! end
 
-function extrapolate_β_to_full_domain(β, design_indices, bathymetry_length)
-    full_β = zeros(eltype(β), bathymetry_length)
+@views function extrapolate_β_to_full_domain(β, design_indices, bathymetry_size)
+    full_β = zeros(eltype(β), bathymetry_size)
     full_β[design_indices] .= β
     return full_β
 end
@@ -42,7 +42,7 @@ end
 
 function compute_objective_and_gradient!(G, β, spec::SolverSpec, objectives::Objectives, ad::ADGradient)
     function solve_and_compute_objective(β)
-        db = extrapolate_β_to_full_domain(β, objectives.design_indices, length(spec.problem.initial_bathymetry))
+        db = extrapolate_β_to_full_domain(β, objectives.design_indices, size(spec.problem.initial_bathymetry))
         objective = objectives.regularization(β)
 
         solver = build_solver(spec, eltype(β))
@@ -68,7 +68,7 @@ function compute_objective_and_gradient!(G, β, spec::SolverSpec, objectives::Ob
                                            U_depth,
                                            objectives.objective_indices)
 
-        objective += sum(densities) * Δx
+        objective += sum(densities) * prod(Δx)
 
         return objective
     end
@@ -81,11 +81,11 @@ function compute_objective_and_gradient!(G, β, spec::SolverSpec, objectives::Ob
 end
 
 function interior_objective_increment(f_prev, f_next, Δt, Δx, ::ForwardEuler)
-    return f_prev * Δt * Δx
+    return f_prev * Δt * prod(Δx)
 end
 
 function interior_objective_increment(f_prev, f_next, Δt, Δx, ::RK2)
-    return 0.5 * (f_next + f_prev) * Δt * Δx
+    return 0.5 * (f_next + f_prev) * Δt * prod(Δx)
 end
 
 include("forward_ad_gradients.jl")
