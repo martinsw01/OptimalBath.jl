@@ -144,7 +144,7 @@ function animate_solution(Ul, Ur, t, cell_faces, b=zero(cell_faces), animation_d
     ratio = (H_lim[2] - H_lim[1]) / (x[end] - x[1])
     @show ratio
     anim = @animate for n in eachindex(t)[1:skip_frames:end]
-        wateranim(x, HH[n, :], UHUH[n, :], "H", H_lim, UH_lim, legend=:topleft, size=800 .* (1, 3ratio))
+        wateranim(x, HH[n, :], UHUH[n, :], "H", H_lim, UH_lim, legend=:bottomleft, size=800 .* (1, 3ratio))
         bathometryplot!(cell_faces, b, "Bathymetry")
 
         timeanim!(t[n], t[end], x[1], x[end], H_lim)
