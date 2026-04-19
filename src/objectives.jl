@@ -11,7 +11,7 @@ function Base.Broadcast.broadcastable(obj::Objective)
 end
 
 function objective_density(obj::Objective, U::States{S, Depth, T}, I...) where {S, T}
-    return objective_density.(obj, U.U[I...])
+    return objective_density.(obj, @view U.U[I...])
 end
 
 function objective_density(::Energy, U)
@@ -57,13 +57,17 @@ end
 function objective_increment(objectives, U, n, Δt, Δx, ::Type{ForwardEuler})
     interior_objective = objectives.interior_objective
     objective_indices = objectives.objective_indices
-    return sum(objective_density(interior_objective, U, objective_indices, n)) * Δt * prod(Δx)
+    return sum(@view U.U[objective_indices, n]) do Uj
+        objective_density(interior_objective, Uj)
+    end * Δt * prod(Δx)
 end
 
 function objective_increment(objectives, U, n, Δt, Δx, ::Type{RK2})
     interior_objective = objectives.interior_objective
     objective_indices = objectives.objective_indices
-    return 0.5 * sum(objective_density(interior_objective, U, objective_indices, n:n+1)) * Δt * prod(Δx)
+    return 0.5 * sum(@view U.U[objective_indices, n:n+1]) do Uj
+        objective_density(interior_objective, Uj)
+    end * Δt * prod(Δx)
 end
 
 function _compute_objective(U::States, t, Δx, β, objectives, timestepper)
@@ -76,10 +80,9 @@ function _compute_objective(U::States, t, Δx, β, objectives, timestepper)
         interior_integral += objective_increment(objectives, U, n, Δt, Δx, timestepper)
     end
 
-    terminal_integral = sum(objective_density(objectives.terminal_objective,
-                                              U,
-                                              objectives.objective_indices,
-                                              M)) * prod(Δx)
+    terminal_integral = sum(U.U[objectives.objective_indices, M]) do Uj
+        objective_density(objectives.terminal_objective, Uj)
+    end * prod(Δx)
 
     return interior_integral + terminal_integral
 end

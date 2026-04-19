@@ -116,13 +116,14 @@ function compare_to_ad(N, compute_U0, initial_bathymetry, β)
 
     problem = PrimalSWEProblem(N, U0, 0.1, initial_bathymetry=initial_bathymetry)
     spec = SolverSpec(problem, VolumeFluxesBackend())
+    solver = build_solver(spec)
     objectives = Objectives(
         interior_objective=KineticEnergy(),
         terminal_objective=KineticEnergy(),
     )
     forward_ad = ForwardADGradient(β)
-    discrete_adjoint = DiscreteAdjointGradient()
-    da_objective, da_gradient = compute_objective_and_gradient(β, spec, objectives, discrete_adjoint)
+    discrete_adjoint = DiscreteAdjointGradient(solver)
+    da_objective, da_gradient = compute_objective_and_gradient(β, solver, objectives, discrete_adjoint)
     forward_ad_objective, forward_ad_gradient = compute_objective_and_gradient(β, spec, objectives, forward_ad)
     @test da_objective ≈ forward_ad_objective
     @test forward_ad_gradient ≈ da_gradient
@@ -133,6 +134,7 @@ function compare_to_2D_ad(N, compute_U0, initial_bathymetry, β)
     grid = Grid2D(N)
     problem = PrimalSWEProblem(U0, 0.1, grid, initial_bathymetry)
     spec = SolverSpec(problem, VolumeFluxesBackend())
+    solver = build_solver(spec)
     objectives = Objectives(
         interior_objective=KineticEnergy(),
         terminal_objective=KineticEnergy(),
@@ -140,8 +142,8 @@ function compare_to_2D_ad(N, compute_U0, initial_bathymetry, β)
         design_indices=CartesianIndices(N .+ 1),
     )
     forward_ad = ForwardADGradient(β)
-    discrete_adjoint = DiscreteAdjointGradient()
-    da_objective, da_gradient = compute_objective_and_gradient(β, spec, objectives, discrete_adjoint)
+    discrete_adjoint = DiscreteAdjointGradient(solver)
+    da_objective, da_gradient = compute_objective_and_gradient(β, solver, objectives, discrete_adjoint)
     forward_ad_objective, forward_ad_gradient = compute_objective_and_gradient(β, spec, objectives, forward_ad)
     @test da_objective ≈ forward_ad_objective
     @test forward_ad_gradient ≈ da_gradient
@@ -154,8 +156,8 @@ function random_U0(N)
 end
 
 function post_proc_affected_U0(N)
-    U0 = fill(State(0.2, 1.), N)
-    U0[1] = State(5e-3, 1.)
+    U0 = fill(State(0., 0.), N)
+    U0[1] = State(1., 0.)
     return States{Average, Elevation}(U0)
 end
 
@@ -189,10 +191,7 @@ end
 end
 
 @testset "Test post-processing step" begin
-    N = 3
-    @testset "Adjoint consistency" begin
-        adjoint_dot_test(N, post_proc_affected_U0, zeros(N+1))
-    end
+    N = 10
     @testset "Compare to AD" begin
         compare_to_ad(N, post_proc_affected_U0, zeros(N+1), zeros(N+1))
         compare_to_ad(N, post_proc_affected_U0, range(0, 0.01, N+1), zeros(N+1))

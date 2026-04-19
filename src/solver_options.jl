@@ -28,6 +28,7 @@ struct PrimalSWEProblem{Bathymetry, FloatType, InitialStates<:AverageElevationSt
     grid::GridType
     function PrimalSWEProblem(U0, T, grid::Grid, initial_bathymetry=zeros(grid.N))
         assert_correct_dimensions(U0, initial_bathymetry, grid)
+        cap_to_bathymetry!(U0, initial_bathymetry)
         return new{typeof(initial_bathymetry), typeof(T), typeof(U0), typeof(grid)}(initial_bathymetry, T, U0, grid)
     end
     function PrimalSWEProblem(N, U0, T; initial_bathymetry=zeros(N + 1), domain=[0.0 1.0])

@@ -17,7 +17,8 @@ function solve_adjoint end
 function add_objective_source!(Λ, U, Δt, Δx, objectives::Objectives, weight=1.0)
     indices = objectives.objective_indices
     objective = objectives.interior_objective
-    Λ[indices] .+= weight * objective_density_gradient.(objective, @view U[indices]) * Δt * prod(Δx)
+    scale = weight * Δt * prod(Δx)
+    @views @. Λ[indices] += scale * objective_density_gradient(objective, U[indices])
 end
 
 function add_objective_source!(Λ, Ul, Ur, Δt, Δx, objectives::Objectives)

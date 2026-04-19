@@ -129,3 +129,14 @@ function adjust_to_bathymetry_changes(U::States{Average, HR},
     adjust_to_bathymetry_changes!(U_adj, U, β)
     return U_adj
 end
+
+
+function cap_to_bathymetry!(U::States{Average, Elevation}, b)
+    for j in CartesianIndices(U.U)
+        h = height(U.U[j])
+        b_j = b_at(Average, b, j)
+        if h < b_j
+            U.U[j] = setindex(zero(U.U[j]), b_j, 1)
+        end
+    end
+end

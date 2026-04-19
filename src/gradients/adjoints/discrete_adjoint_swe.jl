@@ -3,6 +3,7 @@ export DiscreteAdjointSWE, TestDiscreteAdjoint, StepWiseTestDiscreteAdjoint
 using ForwardDiff: jacobian, gradient
 using VolumeFluxes: CentralUpwind, ShallowWaterEquations1D, XDIR
 using StaticArrays: @SMatrix, SMatrix, setindex
+using ElasticArrays: ElasticArray
 
 import OptimalBath: solve_adjoint
 using .OptimalBath: compute_ghost_cell, AdjointSWE, time_frame
@@ -10,13 +11,23 @@ using .OptimalBath: Grid, for_each_left_boundary_directional_stencil, for_each_i
 using .OptimalBath: directions
 
 
-struct DiscreteAdjointSWE{PrimalSolver<:VolumeFluxesSolver, Dims} <: AdjointSWE
+struct DiscreteAdjointSWE{PrimalSolver<:VolumeFluxesSolver, GridT, AdjointStates} <: AdjointSWE
     primal::PrimalSolver
-    grid::Grid{Dims}
+    grid::GridT
+    Λ_preallocated::AdjointStates
     function DiscreteAdjointSWE(primal)
         grid = primal.problem.grid
-        return new{typeof(primal), length(grid.Δx)}(primal, grid)
+        Λ_preallocated = preallocate_adjoint_states(grid, eltype(primal.problem.U0.U))
+        return new{typeof(primal), typeof(grid), typeof(Λ_preallocated)}(primal, grid, Λ_preallocated)
     end
+end
+
+function preallocate_adjoint_states(grid::Grid, StateType)
+    return ElasticArray{StateType}(undef, grid.N..., 0)
+end
+
+function resize_adjoint_states!(da::DiscreteAdjointSWE, U)
+    resize!(da.Λ_preallocated, size(U))
 end
 
 function primal_eq(da::DiscreteAdjointSWE)
@@ -157,6 +168,7 @@ function add_flux_jvp_left_boundary!(Λ1, Λ2, Uc, Ur, Δt, Δx, dir, da::Discre
     dFrdU = flux_right_grad_center(Uc, Ur, dir, da)
     center = - (dFrdU - dFldU_ghost - dFldU) / Δx * Δt
     right = dFrdU / Δx * Δt
+
     return center' * Λ1 + right' * Λ2
 end
 
@@ -168,6 +180,7 @@ function add_flux_jvp_interior!(Λl, Λc, Λr, Ul, Uc, Ur, Δt, Δx, dir, da::Di
     left = -dFldU / Δx * Δt
     center = - (dFrdU - dFldU) / Δx * Δt
     right = dFrdU / Δx * Δt
+
     return left' * Λl + center' * Λc + right' * Λr
 end
 
@@ -179,6 +192,7 @@ function add_flux_jvp_right_boundary!(Λl, Λc, Ul, Uc, Δt, Δx, dir, da::Discr
     dFrdU_ghost = flux_left_grad_center(Uc, Ur, dir, da) * ghost_cell_jvp(Ur, dir)
     left = -dFldU / Δx * Δt
     center = (dFldU - dFrdU_ghost - dFrdU) / Δx * Δt
+
     return left' * Λl + center' * Λc
 end
 
@@ -241,7 +255,6 @@ function adjoint_pre_proc_step!(Λ, U, n, grid, da)
         if height(U[j, n]) < depth_cutoff(da.primal)
             Λ[j, n] = zero_momentum_state(Λ[j, n])
         end
-        Λ[j, n-1] = Λ[j, n]
     end
 end
 
@@ -250,23 +263,29 @@ function time_steps(U, ::Grid{Dims}) where Dims
     return size(U, Dims+1)
 end
 
-@views function solve_adjoint(Λ_end, U::AverageDepthStates, objectives::Objectives, b, t, Δx, da::DiscreteAdjointSWE)
+function solve_adjoint(Λ_end, U::AverageDepthStates, objectives::Objectives, b, t, Δx, da::DiscreteAdjointSWE)
+    Λ = resize_adjoint_states!(da, U.U)
+    return solve_adjoint!(Λ, Λ_end, U, objectives, b, t, Δx, da)
+end
+
+@views function solve_adjoint!(Λ, Λ_end, U::AverageDepthStates, objectives::Objectives, b, t, Δx, da::DiscreteAdjointSWE)
     U = U.U
-    Λ = similar(U)
 
     grid = da.grid
     Δx = grid.Δx
 
     Δt = t[end] - t[end-1]
     M = length(t)
-    μ_final = compute_timestep_correction(Λ_end, time_frame(U, M-1), time_frame(U, M), Δt)
+    
+    time_frame(Λ, M) .= Λ_end
+    adjoint_pre_proc_step!(Λ, U, M, grid, da)
+
+    μ_final = compute_timestep_correction(time_frame(Λ, M), time_frame(U, M-1), time_frame(U, M), Δt)
     J_final = compute_objective_step(time_frame(U, M-1), Δx, objectives)
 
-    time_frame(Λ, M) .= Λ_end
-    dir = 1
     for n in M:-1:2
         Δt = t[n] - t[n-1]
-        adjoint_pre_proc_step!(Λ, U, n, grid, da)
+        time_frame(Λ, n-1) .= time_frame(Λ, n)
         for dir in directions(grid)
             add_flux_jvp!(Λ, U, n, Δt, dir, grid, da)
             add_bottom_source!(Λ, n, t, b, dir, grid, da)
@@ -275,7 +294,7 @@ end
         if n < M
             add_timestep_source!(time_frame(Λ, n-1), time_frame(Λ, n), time_frame(U, n), time_frame(U, n-1), μ_final, J_final, Δt, grid, 0.25, objectives, da)
         end
+        adjoint_pre_proc_step!(Λ, U, n-1, grid, da) # pre processing of the next step
     end
     return Λ
 end
-

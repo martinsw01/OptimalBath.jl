@@ -10,10 +10,17 @@ include("discrete_adjoint_swe.jl")
 
 export DiscreteAdjointGradient
 
-struct DiscreteAdjointGradient <: AdjointGradient end
+struct DiscreteAdjointGradient{PrimalSolver, AdjointSolver} <: AdjointGradient
+    primal_solver::PrimalSolver
+    adjoint_solver::AdjointSolver
+    function DiscreteAdjointGradient(primal_solver::VolumeFluxesSolver)
+        adjoint_solver = DiscreteAdjointSWE(primal_solver)
+        return new{typeof(primal_solver), typeof(adjoint_solver)}(primal_solver, adjoint_solver)
+    end
+end
 
-function adjoint_solver(primal_swe_problem::PrimalSWESolver{NoReconstruction, ForwardEuler, BS}, ::DiscreteAdjointGradient) where BS
-    return DiscreteAdjointSWE(primal_swe_problem)
+function adjoint_solver(::PrimalSWESolver{NoReconstruction, ForwardEuler}, da::DiscreteAdjointGradient)
+    return da.adjoint_solver
 end
 
 function compute_gradient!(G, Λ, U::AverageDepthStates, β, t, Δx, objectives::Objectives, da::DiscreteAdjointSWE)
