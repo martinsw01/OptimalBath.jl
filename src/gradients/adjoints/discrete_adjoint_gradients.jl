@@ -29,84 +29,51 @@ function compute_gradient!(G, Λ, U::AverageDepthStates, β, t, Δx, objectives:
 end
 
 @views function integrate_gradient(U, Λ, t, dir, grid::Grid)
-    Δx = grid.Δx[dir]
-    return sum(momentum.(Λ[2:end], dir) .* height.(U[1:end-1]) .* diff(t)) * 9.81 / Δx
+    Δx = get_Δx(grid, dir)
+    time_indices = 1:(length(t)-1)
+    return sum(time_indices) do n
+        Δt = t[n+1] - t[n]
+        momentum(Λ[n+1], dir) * height(U[n]) * Δt
+    end * 9.81 / Δx
 end
 
 function add_bottom_source_gradient_contribution!(G, Λ, U, t, design_indices, da::DiscreteAdjointSWE)
     add_bottom_source_gradient_contribution!(G, Λ, U, t, design_indices, da.grid)
 end
 
-@views function add_bottom_source_gradient_contribution!(G, Λ, U, t, design_indices::Colon, grid::Grid{1})
-    N, M = size(U)
-    G[1] += integrate_gradient(U[1,:], Λ[1,:], t, 1, grid)
-    for j in 2:N
-        G[j] -= integrate_gradient(U[j-1,:], Λ[j-1,:], t, 1, grid)
-        G[j] += integrate_gradient(U[j,:], Λ[j,:], t, 1, grid)
+signs(::XDIRT, ::Grid{2}) = (1.0, -1.0,  1.0, -1.0)
+signs(::YDIRT, ::Grid{2}) = (1.0,  1.0, -1.0, -1.0)
+offsets(::Grid{2}) = map(CartesianIndex{2}, ((0, 0), (-1, 0), (0, -1), (-1, -1)))
+
+signs(::XDIRT, ::Grid{1}) = (1.0, -1.0)
+offsets(::Grid{1}) = map(CartesianIndex{1}, (0, -1))
+
+in_bounds(i, N) = all(1 .<= Tuple(i) .<= N)
+
+contribution_weight(::Grid{D}) where D = 2.0^(1-D)
+
+
+
+@views function add_bottom_source_gradient_contribution!(G, Λ, U, t, design_indices::CartesianIndices, grid::Grid)
+    N_corners = size(G)
+    N_cells = N_corners .- 1
+
+    w = contribution_weight(grid)
+
+    for dir in directions(grid)
+        for (s, offset) in zip(signs(dir, grid), offsets(grid))
+            for i in CartesianIndices(G)
+                ui = i + offset
+                if in_bounds(ui, N_cells)
+                    I = design_indices[ui]
+                    G[i] += w * s * integrate_gradient(U[I, :], Λ[I, :], t, dir, grid)
+                end
+            end
+        end
     end
-    G[end] -= integrate_gradient(U[end,:], Λ[end,:], t, 1, grid)
 end
 
-@views function add_bottom_source_gradient_contribution!(G, Λ, U, t, design_indices::CartesianIndices, grid::Grid{2})
-    for i in 2:grid.N[1]
-        for j in 2:grid.N[2]
-            G[i, j] += 0.5*integrate_gradient(U[i, j, :], Λ[i, j, :], t, 1, grid)
-            G[i, j] -= 0.5*integrate_gradient(U[i-1, j, :], Λ[i-1, j, :], t, 1, grid)
-            G[i, j] += 0.5*integrate_gradient(U[i, j-1, :], Λ[i, j-1, :], t, 1, grid)
-            G[i, j] -= 0.5*integrate_gradient(U[i-1, j-1, :], Λ[i-1, j-1, :], t, 1, grid)
-        end
-    end
-    for i in 2:grid.N[1]
-        for j in 2:grid.N[2]
-            G[i, j] += 0.5*integrate_gradient(U[i, j, :], Λ[i, j, :], t, 2, grid)
-            G[i, j] += 0.5*integrate_gradient(U[i-1, j, :], Λ[i-1, j, :], t, 2, grid)
-            G[i, j] -= 0.5*integrate_gradient(U[i, j-1, :], Λ[i, j-1, :], t, 2, grid)
-            G[i, j] -= 0.5*integrate_gradient(U[i-1, j-1, :], Λ[i-1, j-1, :], t, 2, grid)
-        end
-    end
-    for i in 2:grid.N[1]
-        j=1
-        G[i, j] += 0.5*integrate_gradient(U[i, j, :], Λ[i, j, :], t, 1, grid)
-        G[i, j] -= 0.5*integrate_gradient(U[i-1, j, :], Λ[i-1, j, :], t, 1, grid)
-
-        j = grid.N[2] + 1
-        G[i, j] += 0.5*integrate_gradient(U[i, j-1, :], Λ[i, j-1, :], t, 1, grid)
-        G[i, j] -= 0.5*integrate_gradient(U[i-1, j-1, :], Λ[i-1, j-1, :], t, 1, grid)
-    end
-    for i in 2:grid.N[1]
-        j=1
-        G[i, j] += 0.5*integrate_gradient(U[i, j, :], Λ[i, j, :], t, 2, grid)
-        G[i, j] += 0.5*integrate_gradient(U[i-1, j, :], Λ[i-1, j, :], t, 2, grid)
-        j = grid.N[2] + 1
-        G[i, j] -= 0.5*integrate_gradient(U[i-1, j-1, :], Λ[i-1, j-1, :], t, 2, grid)
-        G[i, j] -= 0.5*integrate_gradient(U[i, j-1, :], Λ[i, j-1, :], t, 2, grid)
-    end
-    for j in 2:grid.N[2]
-        i = 1
-        G[i, j] += 0.5*integrate_gradient(U[i, j, :], Λ[i, j, :], t, 1, grid)
-        G[i, j] += 0.5*integrate_gradient(U[i, j-1, :], Λ[i, j-1, :], t, 1, grid)
-        i = grid.N[1] + 1
-        G[i, j] -= 0.5*integrate_gradient(U[i-1, j, :], Λ[i-1, j, :], t, 1, grid)
-        G[i, j] -= 0.5*integrate_gradient(U[i-1, j-1, :], Λ[i-1, j-1, :], t, 1, grid)
-    end
-    for j in 2:grid.N[2]
-        i = 1
-        G[i, j] += 0.5*integrate_gradient(U[i, j, :], Λ[i, j, :], t, 2, grid)
-        G[i, j] -= 0.5*integrate_gradient(U[i, j-1, :], Λ[i, j-1, :], t, 2, grid)
-        i = grid.N[1] + 1
-        G[i, j] += 0.5*integrate_gradient(U[i-1, j, :], Λ[i-1, j, :], t, 2, grid)
-        G[i, j] -= 0.5*integrate_gradient(U[i-1, j-1, :], Λ[i-1, j-1, :], t, 2, grid)
-    end
-    G[1, 1] += 0.5*integrate_gradient(U[1, 1, :], Λ[1, 1, :], t, 1, grid)
-    G[1, 1] += 0.5*integrate_gradient(U[1, 1, :], Λ[1, 1, :], t, 2, grid)
-
-    G[1, grid.N[2]+1] += 0.5*integrate_gradient(U[1, grid.N[2], :], Λ[1, grid.N[2], :], t, 1, grid)
-    G[1, grid.N[2]+1] -= 0.5*integrate_gradient(U[1, grid.N[2], :], Λ[1, grid.N[2], :], t, 2, grid)
-
-    G[grid.N[1]+1, 1] -= 0.5*integrate_gradient(U[grid.N[1], 1, :], Λ[grid.N[1], 1, :], t, 1, grid)
-    G[grid.N[1]+1, 1] += 0.5*integrate_gradient(U[grid.N[1], 1, :], Λ[grid.N[1], 1, :], t, 2, grid)
-
-    G[grid.N[1]+1, grid.N[2]+1] -= 0.5*integrate_gradient(U[grid.N[1], grid.N[2], :], Λ[grid.N[1], grid.N[2], :], t, 1, grid)
-    G[grid.N[1]+1, grid.N[2]+1] -= 0.5*integrate_gradient(U[grid.N[1], grid.N[2], :], Λ[grid.N[1], grid.N[2], :], t, 2, grid)
+function add_bottom_source_gradient_contribution!(G, Λ, U, t, design_indices::Colon, grid::Grid{1})
+    add_bottom_source_gradient_contribution!(G, Λ, U, t, CartesianIndices(G), grid)
 end
 end
