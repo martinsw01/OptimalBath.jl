@@ -41,8 +41,8 @@ function Grid2D(Nx, Ny; domain=[0.0 1.0; 0.0 1.0])
     return Grid{2, eltype(Δ), typeof(domain)}(Δ, N, domain)
 end
 
-function directions(grid::Grid)
-    return map(Val, eachindex(grid.N))
+function directions(::Grid{D}) where D
+    return ntuple(Val, D)
 end
 
 Grid2D(N::NTuple{2, Integer}; domain=[0.0 1.0; 0.0 1.0]) = Grid2D(N..., domain=domain)

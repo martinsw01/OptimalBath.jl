@@ -269,8 +269,6 @@ function solve_adjoint(Λ_end, U::AverageDepthStates, objectives::Objectives, b,
 end
 
 @views function solve_adjoint!(Λ, Λ_end, U::AverageDepthStates, objectives::Objectives, b, t, Δx, da::DiscreteAdjointSWE)
-    U = U.U
-
     grid = da.grid
     Δx = grid.Δx
 
@@ -278,23 +276,23 @@ end
     M = length(t)
     
     time_frame(Λ, M) .= Λ_end
-    adjoint_pre_proc_step!(Λ, U, M, grid, da)
+    adjoint_pre_proc_step!(Λ, U.U, M, grid, da)
 
-    μ_final = compute_timestep_correction(time_frame(Λ, M), time_frame(U, M-1), time_frame(U, M), Δt)
-    J_final = compute_objective_step(time_frame(U, M-1), Δx, objectives)
+    μ_final = compute_timestep_correction(time_frame(Λ, M), time_frame(U.U, M-1), time_frame(U.U, M), Δt)
+    J_final = compute_objective_step(time_frame(U.U, M-1), Δx, objectives)
 
     for n in M:-1:2
         Δt = t[n] - t[n-1]
         time_frame(Λ, n-1) .= time_frame(Λ, n)
         for dir in directions(grid)
-            add_flux_jvp!(Λ, U, n, Δt, dir, grid, da)
+            add_flux_jvp!(Λ, U.U, n, Δt, dir, grid, da)
             add_bottom_source!(Λ, n, t, b, dir, grid, da)
         end
-        add_objective_source!(time_frame(Λ, n-1), time_frame(U, n-1), Δt, Δx, objectives, da)
+        add_objective_source!(time_frame(Λ, n-1), time_frame(U.U, n-1), Δt, Δx, objectives, da)
         if n < M
-            add_timestep_source!(time_frame(Λ, n-1), time_frame(Λ, n), time_frame(U, n), time_frame(U, n-1), μ_final, J_final, Δt, grid, 0.25, objectives, da)
+            add_timestep_source!(time_frame(Λ, n-1), time_frame(Λ, n), time_frame(U.U, n), time_frame(U.U, n-1), μ_final, J_final, Δt, grid, 0.25, objectives, da)
         end
-        adjoint_pre_proc_step!(Λ, U, n-1, grid, da) # pre processing of the next step
+        adjoint_pre_proc_step!(Λ, U.U, n-1, grid, da) # pre processing of the next step
     end
     return Λ
 end

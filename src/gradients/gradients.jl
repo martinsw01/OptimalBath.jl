@@ -1,11 +1,11 @@
 export Objectives
 
-@kwdef struct Objectives
-    interior_objective::Objective = NoObjective()
-    terminal_objective::Objective = NoObjective()
-    regularization = no_regularization
-    design_indices = Colon()
-    objective_indices = Colon()
+@kwdef struct Objectives{InteriorObjective<:Objective, TerminalObjective<:Objective, Regularization, DesignIndices, ObjectiveIndices}
+    interior_objective::InteriorObjective = NoObjective()
+    terminal_objective::TerminalObjective = NoObjective()
+    regularization::Regularization = no_regularization
+    design_indices::DesignIndices = Colon()
+    objective_indices::ObjectiveIndices = Colon()
 end
 
 function compute_objective_and_gradient!(G, β, spec::SolverSpec, objectives::Objectives, gradient_type::GradientType)
