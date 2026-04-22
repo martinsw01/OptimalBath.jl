@@ -1,5 +1,6 @@
 using Revise
 using OptimalBath
+using Plots
 
 function bump(x, c)
     return exp(-0.01 * (x - c)^2)
@@ -40,8 +41,6 @@ end
 function create_spec(problem)
     backend = VolumeFluxesBackend()
     options = SolverOptions()
-    # options = SolverOptions(SoftMinModSlope())
-    # options = SolverOptions(MinModSlope())
     return SolverSpec(problem, backend, options)
 end
 
@@ -50,17 +49,8 @@ function solve_and_animate(N, β=zeros(N + 1))
     spec = create_spec(problem)
     solver = build_solver(spec)
     Ul, t, x = solve_primal(solver, β)
-    # (Ul, Ur), t, x = solve_primal(solver, β)
-    # Ul = unsafe_to_elevation!(Ul, problem.initial_bathymetry)
-    # Ur = unsafe_to_elevation!(Ur, problem.initial_bathymetry)
-    # for n in axes(Ul.U, 2)
-    #     if n % 10 == 0
-    #         @show sum(Ul.U[:, n]) #+ sum(Ur.U[:, n])
-    #     end
-    # end
 
-    OptimalBath.animate_solution(Ul.U, Ul.U, t, x, problem.initial_bathymetry .+ β, 4.0)
-    # OptimalBath.animate_solution(Ul.U, Ur.U, t, x, problem.initial_bathymetry, 4.0)
+    animate_solution(Ul.U, Ul.U, t, x, problem.initial_bathymetry .+ β, 4.0, PlotsBackend())
 end
 
 
@@ -69,18 +59,10 @@ function compute_and_plot_gradient(N)
     spec = create_spec(problem)
     solver = build_solver(spec)
     β = zero(problem.initial_bathymetry)
-    objectives = Objectives(objective_indices=3N÷4:N, interior_objective=Mass(), regularization=(b) -> sum(abs2, b)/N)#)0.1sum(soft_abs, b)/N)
-
-    # objectives = Objectives(objective_indices=N÷2:N, interior_objective=Mass())
-    # forward_ad = ForwardADGradient(β)
+    objectives = Objectives(objective_indices=3N÷4:N, interior_objective=Mass())
     discrete_adjoint = DiscreteAdjointGradient(solver)
-    # objective, gradient = compute_objective_and_gradient(β, spec, objectives, forward_ad)
     objective, gradient = compute_objective_and_gradient(β, solver, objectives, discrete_adjoint)
-    x = range(problem.grid.domain..., length=N + 1)
-    # objective, gradient = compute_objective_and_gradient(β, spec, objectives, forward_ad)
-    display(plot_gradient(gradient, x, problem.U0, problem.initial_bathymetry))
-    # display(gradient)
-    # display(objective)
+    plot_gradient(gradient, problem.initial_bathymetry, problem.U0, objectives, problem.grid, PlotsBackend())
 end
 
 
@@ -92,20 +74,14 @@ end
 function optimize_problem(N, β0=zeros(N + 1))
     problem = create_problem(N)
     spec = create_spec(problem)
-    # objectives = Objectives(objective_indices=3N÷4:N, interior_objective=Mass(), regularization=(b) -> sum(soft_abs, b)/N)
-    # objectives = Objectives(objective_indices=3N÷4:N, interior_objective=Mass(), regularization=(b) -> sum(soft_abs, b)/N + sum(soft_abs, diff(b)) / N)
-    objectives = Objectives(objective_indices=3N÷4:N, interior_objective=Mass(), regularization=(b) -> sum(abs2, b)/N)#)0.1sum(soft_abs, b)/N)
-
     solver = build_solver(spec)
+    objectives = Objectives(objective_indices=3N÷4:N, interior_objective=Mass(), regularization=(b) -> sum(soft_abs, b)/N)
     gradient_type = DiscreteAdjointGradient(solver)
     inverse_problem = InverseSWEProblem(problem, solver, objectives, gradient_type)
-    # gradient_type = ForwardADGradient(β0)
-    # inverse_problem = InverseSWEProblem(problem, spec, objectives, gradient_type)
-    anim_callback, finalize_anim = OptimalBath.animate_optimization(inverse_problem, β0)
+    # anim_callback, finalize_anim = plot_objective_and_gradient_norm(inverse_problem, PlotsBackend())
+    anim_callback, finalize_anim = OptimalBath.animate_optimization(inverse_problem, β0, PlotsBackend())
     res = optimize(inverse_problem, BFGSOptimizer(), β0, anim_callback)
-    # res = optimize(inverse_problem, BFGSOptimizer(), β0, Returns(true))
-    # res = optimize(inverse_problem, GradientDescent(), β0, anim_callback)
-    display(finalize_anim(fps=10))#;fps=10))#;loop=0, fps=1))
+    display(finalize_anim())
     return res
 end
 

@@ -40,7 +40,11 @@ function update_bathymetry_plot!(plt, x, b, β, n)
     end
 end
 
-function animate_optimization(inverse_problem::InverseSWEProblem, β0=zero(inverse_problem.primal_problem.initial_bathymetry))
+function OptimalBath.animate_optimization(inverse_problem::InverseSWEProblem,  backend::PlotsBackend)
+    OptimalBath.animate_optimization(inverse_problem, zero(inverse_problem.primal_problem.initial_bathymetry), backend)
+end
+
+function OptimalBath.animate_optimization(inverse_problem::InverseSWEProblem, β0, ::PlotsBackend)
     xmin = cell_faces(inverse_problem.primal_problem.grid, XDIR)[inverse_problem.objectives.objective_indices[1]]
     xmax = cell_faces(inverse_problem.primal_problem.grid, XDIR)[inverse_problem.objectives.objective_indices[end] + 1]
     vspan([xmin, xmax], fillcolor=:red, fillalpha=0.1, label="Objective region")
@@ -87,7 +91,7 @@ end
 
 
 
-function plot_objective_and_gradient_norm(inverse_problem::InverseSWEProblem)
+function OptimalBath.plot_objective_and_gradient_norm(inverse_problem::InverseSWEProblem, ::PlotsBackend)
     objective_history = Float64[]
     regularization_history = Float64[]
     gradient_norm_history = Float64[]

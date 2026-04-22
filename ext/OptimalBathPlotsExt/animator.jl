@@ -1,6 +1,5 @@
 using Plots
 
-export animate_water
 include("recipes/bathymetry_recipe.jl")
 include("recipes/time_recipe.jl")
 include("recipes/water_recipe.jl")
@@ -125,7 +124,12 @@ end
 # end
 
 
-function animate_solution(Ul, Ur, t, cell_faces, b=zero(cell_faces), animation_duration=t[end])
+function OptimalBath.animate_solution(Ul, Ur, t, cell_faces, b, backend::PlotsBackend)
+    OptimalBath.animate_solution(Ul, Ur, t, cell_faces, b, t[end], backend)
+end
+
+
+function OptimalBath.animate_solution(Ul, Ur, t, cell_faces, b, animation_duration, ::PlotsBackend)
     fps, skip_frames = calc_fps(t, animation_duration)
     skip_frames *= 4
     

@@ -2,6 +2,8 @@ module OptimalBathPlotsExt
 
 using OptimalBath
 
-OptimalBath.plot_gradient(::PlotsBackend) = println("OptimalBathPlotsExt.jl!")
+include("animator.jl")
+include("gradient_plots.jl")
+include("optimization_animations.jl")
 
 end
