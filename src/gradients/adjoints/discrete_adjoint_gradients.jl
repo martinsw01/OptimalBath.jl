@@ -48,7 +48,7 @@ offsets(::Grid{2}) = map(CartesianIndex{2}, ((0, 0), (-1, 0), (0, -1), (-1, -1))
 signs(::XDIRT, ::Grid{1}) = (1.0, -1.0)
 offsets(::Grid{1}) = map(CartesianIndex{1}, (0, -1))
 
-in_bounds(i, N) = all(1 .<= Tuple(i) .<= N)
+in_bounds(i, N) = i in CartesianIndices(N)
 
 contribution_weight(::Grid{D}) where D = 2.0^(1-D)
 

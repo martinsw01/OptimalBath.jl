@@ -127,6 +127,7 @@ end
 
 function animate_solution(Ul, Ur, t, cell_faces, b=zero(cell_faces), animation_duration=t[end])
     fps, skip_frames = calc_fps(t, animation_duration)
+    skip_frames *= 4
     
     hl = height.(Ul)
     hr = height.(Ur)
@@ -141,7 +142,7 @@ function animate_solution(Ul, Ur, t, cell_faces, b=zero(cell_faces), animation_d
     H_lim = calc_ylim(0, y_max, 0.1)
     # UH_lim = calc_ylim(0, maximum(UHUH), 0.1)
     UH_lim = calc_ylim(extrema(UHUH)..., 0.1)
-    ratio = (H_lim[2] - H_lim[1]) / (x[end] - x[1])
+    ratio = max((H_lim[2] - H_lim[1]) / (x[end] - x[1]), 0.3)
     @show ratio
     anim = @animate for n in eachindex(t)[1:skip_frames:end]
         wateranim(x, HH[n, :], UHUH[n, :], "H", H_lim, UH_lim, legend=:bottomleft, size=800 .* (1, 3ratio))

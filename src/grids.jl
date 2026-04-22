@@ -4,6 +4,7 @@ export get_Δx
 export for_each_cell, for_each_interior_directional_stencil, for_each_left_boundary_directional_stencil, for_each_right_boundary_directional_stencil
 export for_each_interior_interface, for_each_left_boundary_interface, for_each_right_boundary_interface
 export directions
+export cell_faces, cell_centers
 
 const XDIRT = Val{1}
 const YDIRT = Val{2}
@@ -39,6 +40,22 @@ function Grid2D(Nx, Ny; domain=[0.0 1.0; 0.0 1.0])
     Δ = (Δx, Δy)
     N = (Nx, Ny)
     return Grid{2, eltype(Δ), typeof(domain)}(Δ, N, domain)
+end
+
+cell_faces(grid::Grid) = map(directions(grid)) do dir
+    cell_faces(grid, dir)
+end
+
+function cell_faces(grid::Grid, ::Val{dir}) where dir
+    return range(grid.domain[dir, 1], grid.domain[dir, 2], length=grid.N[dir] + 1)
+end
+
+cell_centers(grid::Grid) = map(directions(grid)) do dir
+    cell_centers(grid, dir)
+end
+
+function cell_centers(grid::Grid, ::Val{dir}) where dir
+    return range(grid.domain[dir, 1] + grid.Δx[dir] * 0.5, grid.domain[dir, 2] - grid.Δx[dir] * 0.5, length=grid.N[dir])
 end
 
 function directions(::Grid{D}) where D
