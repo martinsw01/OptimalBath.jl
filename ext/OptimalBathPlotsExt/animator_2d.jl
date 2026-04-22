@@ -18,7 +18,7 @@ function plot_water_surface(U, grid::Grid{2})
              clim=(-1, 1))
 end
 
-function animate_solution(U, t, bathymetry, grid::Grid{2}; camera_angle=(30, 30))
+function OptimalBath.animate_solution(U, t, bathymetry, grid::Grid{2}, ::PlotsBackend; camera_angle=(30, 30))
     anim = @animate for n in eachindex(t)
         plot_bathymetry(bathymetry, grid, camera_angle)
         plot_water_surface(U[:, :, n], grid)
