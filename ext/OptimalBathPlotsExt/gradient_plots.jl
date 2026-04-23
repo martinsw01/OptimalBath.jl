@@ -2,9 +2,9 @@ function OptimalBath.plot_gradient(g, b, U0, grid::Grid{1}, ::PlotsBackend)
     x = cell_faces(grid, XDIR)
     x = sort([x[1:end-1]; x[2:end]])
 
-    H = height.(U0.U)
+    H = height.(U0)
     H = max.(H, 0.5 * (b[1:end-1] + b[2:end]))
-    P = momentum.(U0.U)
+    P = momentum.(U0)
     HH = combine_matrices(H', H')[1,:]
     PP = combine_matrices(P', P')[1,:]
     H_lim = calc_ylim(extrema(H)..., 0.1)
