@@ -1,5 +1,6 @@
 export PlotBackend, PlotsBackend, MakieBackend
-export animate_solution, animate_adjoint_solution, plot_gradient, animate_optimization, plot_objective
+export animate_solution, animate_adjoint_solution, animate_optimization
+export plot_gradient, plot_objective, plot_objective_and_gradient_norm
 
 
 abstract type PlotBackend end
