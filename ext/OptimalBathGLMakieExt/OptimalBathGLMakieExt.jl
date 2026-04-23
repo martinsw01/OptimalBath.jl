@@ -1,9 +1,10 @@
 module OptimalBathGLMakieExt
 
 using OptimalBath
+using GLMakie
 
-function OptimalBath.plot_gradient(::MakieBackend)
-    println("OptimalBathGLMakieExt.jl!")
-end
+include("water_1d_plots.jl")
+include("water_1d_anims.jl")
+include("gradients_1d.jl")
 
 end

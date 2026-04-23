@@ -1,6 +1,7 @@
 using Revise
 using OptimalBath
 using Plots
+using GLMakie
 
 function bump(x, c)
     return exp(-0.01 * (x - c)^2)
@@ -50,7 +51,7 @@ function solve_and_animate(N, β=zeros(N + 1))
     solver = build_solver(spec)
     Ul, t, x = solve_primal(solver, β)
 
-    animate_solution(Ul.U, Ul.U, t, x, problem.initial_bathymetry .+ β, 4.0, PlotsBackend())
+    animate_solution(Ul.U, Ul.U, t, problem.initial_bathymetry .+ β, problem.grid, 4.0, MakieBackend())
 end
 
 
@@ -62,7 +63,7 @@ function compute_and_plot_gradient(N)
     objectives = Objectives(objective_indices=3N÷4:N, interior_objective=Mass())
     discrete_adjoint = DiscreteAdjointGradient(solver)
     objective, gradient = compute_objective_and_gradient(β, solver, objectives, discrete_adjoint)
-    plot_gradient(gradient, problem.initial_bathymetry, problem.U0, objectives, problem.grid, PlotsBackend())
+    plot_gradient(gradient, problem.initial_bathymetry, problem.U0.U, objectives, problem.grid, MakieBackend())
 end
 
 
