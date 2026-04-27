@@ -23,7 +23,7 @@ function plot_results(objective_history, regularization_history, gradient_norm_h
     plot_total_cost!(ax, objective_history)
     plot_construction_cost!(ax, regularization_history, objectives.regularization)
     plot_flood_cost!(ax, objective_history, regularization_history, objectives.interior_objective)
-    add_dummy_gradient_legend_entry!(ax)
+    add_dummy_gradient_norm_legend_entry!(ax)
     plot_gradient_norm!(gradient_ax, gradient_norm_history)
     axislegend(ax, position=:rt, framevisible=false, dsjk=1)
     f
@@ -47,7 +47,7 @@ function plot_flood_cost!(ax, objective_history, regularization_history, objecti
            label="Flood cost ($objective)")
 end
 
-function add_dummy_gradient_legend_entry!(ax)
+function add_dummy_gradient_norm_legend_entry!(ax)
     scatterlines!(ax, [NaN], [NaN], color=Cycled(4), linestyle=:dash, label="Gradient norm")
 end
 

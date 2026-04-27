@@ -65,7 +65,7 @@ function solve_and_animate(N, β=zeros(N .+ 1))
     spec = create_spec(problem)
     solver = build_solver(spec)
     U, t, x = solve_primal(solver, β)
-    animate_solution(U.U, t, problem.initial_bathymetry + β, problem.grid, PlotsBackend())
+    animate_solution(U.U, t, problem.initial_bathymetry + β, problem.grid, MakieBackend())
 end
 
 function compute_and_plot_gradient(N, β=zeros(N .+ 1))
@@ -91,7 +91,7 @@ function optimize_problem(N, β0=zeros(N.+1))
     solver = build_solver(spec)
     discrete_adjoint = DiscreteAdjointGradient(solver)
     inverse_problem = InverseSWEProblem(problem, solver, objectives, discrete_adjoint)
-    plot_callback, finalize_plot = OptimalBath.plot_objective_and_gradient_norm(inverse_problem, PlotsBackend())
+    plot_callback, finalize_plot = OptimalBath.plot_objective_and_gradient_norm(inverse_problem, MakieBackend())
     res = optimize(inverse_problem, BFGSOptimizer(), β0, plot_callback)
     display(finalize_plot())
     return res
