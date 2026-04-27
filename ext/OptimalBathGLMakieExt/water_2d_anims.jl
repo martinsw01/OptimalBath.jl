@@ -1,8 +1,8 @@
 function OptimalBath.animate_solution(U, t, b, grid::Grid{2}, ::MakieBackend; duration=t[end])
-    f = Figure()
-    ax = create_simulation_axis(f)
-
     n = Observable(firstindex(t))
+
+    f = Figure()
+    ax = create_simulation_axis(f, @lift (1.7pi + 0.5pi * $n / length(t)))
     water_elevation = @lift OptimalBath.height.(U[:, :, $n]) .- 0.02
     water_color = @lift depth_color(U[:, :, $n], b)
 
@@ -25,13 +25,13 @@ function depth_color(U, b)
     return height.(to_depth(States{Average, Elevation}(U), b).U)
 end
 
-create_simulation_axis(f) =  Axis3(
+create_simulation_axis(f, azimuth=1.7pi) =  Axis3(
     f[1, 1],
     xlabel="x (m)",
     ylabel="y (m)",
     zlabel="Height (m)",
     title="Flood simulation",
-    azimuth=1.7pi
+    azimuth=azimuth
 )
 
 function plot_bathymetry_surface!(ax, grid, b)

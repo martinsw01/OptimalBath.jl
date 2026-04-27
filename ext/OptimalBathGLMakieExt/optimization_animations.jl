@@ -20,15 +20,19 @@ end
 function animate_results(total_cost_history, construction_cost_history, gradient_norm_history, β, inverse_problem)
     n_lifted = Observable(1)
 
-    f = Figure()
+    f = Figure(size=(1200, 1200))
     add_bathymetry_plot!(f, β, n_lifted, inverse_problem)
 
     add_cost_bars!(f, total_cost_history, construction_cost_history, n_lifted, inverse_problem)
 
     add_gradient_norm_bar!(f, gradient_norm_history, n_lifted)
 
+    ax = plot_results!(f[2,:], total_cost_history, construction_cost_history, gradient_norm_history, inverse_problem.objectives)
+    vlines!(ax, (@lift [$n_lifted]), color=:black, linestyle=:dash)
+    # @lift Slider(f[2, :], range=eachindex(total_cost_history), startvalue=$n_lifted)
+
     path = tempname() * "_optimization_animation.mp4"
-    record(f, path, axes(β, 2); framerate = 3) do n
+    record(f, path, axes(β, 2); framerate = 5) do n
         n_lifted[] = n
     end
     @info "Optimization animation saved to $path"
@@ -128,8 +132,8 @@ end
 create_bathymetry_ax(f, title) = Axis(
     f[1, 1],
     title=title,
-    xlabel="x",
-    ylabel="Height"
+    xlabel="x (m)",
+    ylabel="Height (m)"
 )
 
 create_cost_ax(f) = Axis(
