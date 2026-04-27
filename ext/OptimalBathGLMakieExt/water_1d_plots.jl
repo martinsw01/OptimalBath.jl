@@ -9,7 +9,7 @@ end
 
 function create_water_figure_and_axis()
     f = Figure()
-    ax = Axis(f[1, 1], xlabel="x", ylabel="Height above reference (m)")
+    ax = Axis(f[1, 1], xlabel="x (m)", ylabel="Height above reference (m)")
     return f, ax
 end
 
@@ -65,11 +65,8 @@ function compute_time_position(tn, t, grid::Grid{1})
     return (x_R - x_L) * tn / t_end + x_L
 end
 
-function plot_time(ax, y, x_t, t, grid::Grid{1})
-    x_L, x_R = extrema(cell_faces(grid, XDIR))
-
-    lines!(ax, [x_L, x_R], [y, y], color=:lightgray, linewidth=10)
-    lines!(ax, (@lift [x_L, $x_t]), [y, y], color=:grey, linewidth=10, label="Time: $(t[]) s")
+function plot_time(f, t, n)
+    @lift Slider(f[2, 1], range=eachindex(t), startvalue=$n)
 end
 
 function Base.minmax(a, b, c, d)
