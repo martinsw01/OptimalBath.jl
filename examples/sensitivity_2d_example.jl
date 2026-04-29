@@ -1,5 +1,6 @@
 using Revise
 using OptimalBath
+using GLMakie
 
 function bump(x, a, c)
     return exp(-a * (x - c)^2)
@@ -55,7 +56,8 @@ function solve_and_animate_along_x(N, β=zeros(N .+ 1))
     U, t, centers = solve_primal(solver, β)
     y_index = N[2] ÷ 2
     U_x = get_solution_along_x(U, y_index)
-    OptimalBath.animate_solution(U_x, U_x, t, cell_faces(problem.grid, XDIR), problem.initial_bathymetry[:, y_index] .+ β[:, y_index], 4.0)
+    grid_1d = Grid1D(N[1], domain=[0.0 100.0])
+    animate_solution(U_x, U_x, t, problem.initial_bathymetry[:, y_index] .+ β[:, y_index], grid_1d, 4.0, MakieBackend())
 end
 
 function solve_and_animate(N, β=zeros(N .+ 1))
@@ -63,7 +65,7 @@ function solve_and_animate(N, β=zeros(N .+ 1))
     spec = create_spec(problem)
     solver = build_solver(spec)
     U, t, x = solve_primal(solver, β)
-    OptimalBath.animate_solution(U.U, t, problem.initial_bathymetry + β, problem.grid)
+    animate_solution(U.U, t, problem.initial_bathymetry + β, problem.grid, MakieBackend())
 end
 
 function compute_and_plot_gradient(N, β=zeros(N .+ 1))
@@ -76,7 +78,7 @@ function compute_and_plot_gradient(N, β=zeros(N .+ 1))
     discrete_adjoint = DiscreteAdjointGradient(solver)
     objective, gradient = compute_objective_and_gradient(β, solver, objectives, discrete_adjoint)
 
-    plot_gradient(gradient, problem.initial_bathymetry + β, objectives, problem.grid)
+    plot_gradient(gradient, problem.initial_bathymetry + β, objectives, problem.grid, MakieBackend())
 end
 
 function optimize_problem(N, β0=zeros(N.+1))
@@ -89,7 +91,7 @@ function optimize_problem(N, β0=zeros(N.+1))
     solver = build_solver(spec)
     discrete_adjoint = DiscreteAdjointGradient(solver)
     inverse_problem = InverseSWEProblem(problem, solver, objectives, discrete_adjoint)
-    plot_callback, finalize_plot = OptimalBath.plot_objective_and_gradient_norm(inverse_problem)
+    plot_callback, finalize_plot = OptimalBath.plot_objective_and_gradient_norm(inverse_problem, MakieBackend())
     res = optimize(inverse_problem, BFGSOptimizer(), β0, plot_callback)
     display(finalize_plot())
     return res

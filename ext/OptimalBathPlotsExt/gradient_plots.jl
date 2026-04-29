@@ -1,17 +1,10 @@
-export plot_gradient
-
-function plot_gradient(g, cell_faces)
-    @assert size(g) == size(cell_faces)
-    plot(cell_faces, g, label="Gradient", xlabel="x", ylabel="∂J/∂β")
-end
-
-function plot_gradient(g, b, U0, grid::Grid{1})
+function OptimalBath.plot_gradient(g, b, U0, grid::Grid{1}, ::PlotsBackend)
     x = cell_faces(grid, XDIR)
     x = sort([x[1:end-1]; x[2:end]])
 
-    H = height.(U0.U)
+    H = height.(U0)
     H = max.(H, 0.5 * (b[1:end-1] + b[2:end]))
-    P = momentum.(U0.U)
+    P = momentum.(U0)
     HH = combine_matrices(H', H')[1,:]
     PP = combine_matrices(P', P')[1,:]
     H_lim = calc_ylim(extrema(H)..., 0.1)
@@ -31,8 +24,8 @@ function plot_gradient(g, b, U0, grid::Grid{1})
     return background_plot
 end
 
-function plot_gradient(g, b, U, objectives::Objectives, grid::Grid{1})
-    plt = plot_gradient(g, b, U, grid)
+function OptimalBath.plot_gradient(g, b, U, objectives::Objectives, grid::Grid{1}, backend::PlotsBackend)
+    plt = plot_gradient(g, b, U, grid, backend)
     plot_objective_region!(plt, objectives, grid)
     return plt
 end
@@ -91,7 +84,7 @@ function bathymetry_contour!(plt, x_faces, y_faces, b, g_clims)
     plot!(plt, [], [], color=:black, label="Bathymetry contours")
 end
 
-function plot_gradient(g, b, grid::Grid{2})
+function OptimalBath.plot_gradient(g, b, grid::Grid{2}, ::PlotsBackend)
     x_faces = cell_faces(grid, XDIR)
     y_faces = cell_faces(grid, YDIR)
     m = maximum(abs, g)
@@ -118,8 +111,8 @@ function plot_objective!(plt, objectives::Objectives, grid::Grid{2})
           label="Objective region")
 end
 
-function plot_gradient(g, b, objectives::Objectives, grid::Grid{2})
-    plt = plot_gradient(g, b, grid)
+function OptimalBath.plot_gradient(g, b, objectives::Objectives, grid::Grid{2}, backend::PlotsBackend)
+    plt = plot_gradient(g, b, grid, backend)
     plot_objective!(plt, objectives, grid)
     return plt
 end
