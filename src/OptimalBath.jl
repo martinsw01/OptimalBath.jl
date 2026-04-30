@@ -9,6 +9,8 @@ include("solver_options.jl")
 include("PrimalSWE.jl")
 include("gradients/gradients.jl")
 include("solver.jl")
-include("objectives.jl")
+include("objectives/objectives.jl")
+include("objectives/regularizations.jl")
+include("viz/interface.jl")
 
 end

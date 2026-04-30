@@ -1,6 +1,5 @@
 using Revise
 using OptimalBath
-using Plots
 using GLMakie
 
 function bump(x, c)
@@ -55,28 +54,21 @@ function solve_and_animate(N, β=zeros(N + 1))
 end
 
 
-function compute_and_plot_gradient(N)
+function compute_and_plot_gradient(N, β=zeros(N + 1))
     problem = create_problem(N)
     spec = create_spec(problem)
     solver = build_solver(spec)
-    β = zero(problem.initial_bathymetry)
-    objectives = Objectives(objective_indices=3N÷4:N, interior_objective=Mass())
+    objectives = Objectives(objective_indices=3N÷4:N, interior_objective=Mass(), regularization=0.9SoftL1(10.0) + 0.1SoftTV(10.0))
     discrete_adjoint = DiscreteAdjointGradient(solver)
     objective, gradient = compute_objective_and_gradient(β, solver, objectives, discrete_adjoint)
     plot_gradient(gradient, problem.initial_bathymetry, problem.U0.U, objectives, problem.grid, MakieBackend())
-end
-
-
-function soft_abs(x)
-    α = 10.0
-    return (log(1 + exp(-2*α * x)) + log(1 + exp(2*α * x)) - log(2)) / α
 end
 
 function optimize_problem(N, β0=zeros(N + 1))
     problem = create_problem(N)
     spec = create_spec(problem)
     solver = build_solver(spec)
-    objectives = Objectives(objective_indices=3N÷4:N, interior_objective=Mass(), regularization=(b) -> sum(soft_abs, b)/N)
+    objectives = Objectives(objective_indices=3N÷4:N, interior_objective=Mass(), regularization=0.9SoftL1(10.0) + 0.1SoftTV(10.0))
     gradient_type = DiscreteAdjointGradient(solver)
     inverse_problem = InverseSWEProblem(problem, solver, objectives, gradient_type)
     # anim_callback, finalize_anim = plot_objective_and_gradient_norm(inverse_problem, MakieBackend())
@@ -91,8 +83,3 @@ end
 
 
 # OptimalBath.plot_reconstruction_comparison(sin.(range(0, stop=2π, length=20)); ε=1)
-
-
-
-
-# 

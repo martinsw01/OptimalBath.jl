@@ -126,7 +126,7 @@ function compare_objectives(timestepper::TimeStepper)
     objectives = OptimalBath.Objectives(design_indices=design_indices,
                                         interior_objective=OptimalBath.Mass(),
                                         terminal_objective=OptimalBath.Energy(),
-                                        regularization=(β) -> sum(abs2, β)
+                                        regularization=L2()
                                         )
 
     gradient_type = TestADGradient()

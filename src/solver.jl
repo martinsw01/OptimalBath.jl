@@ -1,9 +1,5 @@
 export Optimizer, BFGSOptimizer, InverseSWEProblem, optimize, GradientDescent
 
-function no_regularization(β)
-    return zero(eltype(β))
-end
-
 abstract type Optimizer end
 
 struct BFGSOptimizer <: Optimizer end

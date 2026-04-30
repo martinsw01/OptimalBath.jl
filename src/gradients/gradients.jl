@@ -1,9 +1,9 @@
 export Objectives
 
-@kwdef struct Objectives{InteriorObjective<:Objective, TerminalObjective<:Objective, Regularization, DesignIndices, ObjectiveIndices}
+@kwdef struct Objectives{InteriorObjective<:Objective, TerminalObjective<:Objective, RegType, DesignIndices, ObjectiveIndices}
     interior_objective::InteriorObjective = NoObjective()
     terminal_objective::TerminalObjective = NoObjective()
-    regularization::Regularization = no_regularization
+    regularization::RegType = NoRegularization()
     design_indices::DesignIndices = Colon()
     objective_indices::ObjectiveIndices = Colon()
 end

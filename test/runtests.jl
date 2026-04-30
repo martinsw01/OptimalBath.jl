@@ -42,6 +42,10 @@ using Test
     @testset "Bathymetry selection tests" begin
         include("bathymetry_tests.jl")
     end
+
+    @testset "Regularization tests" begin
+        include("regularization_tests.jl")
+    end
 end
 
 nothing

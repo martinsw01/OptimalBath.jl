@@ -24,7 +24,8 @@ function adjoint_solver(::PrimalSWESolver{NoReconstruction, ForwardEuler}, da::D
 end
 
 function compute_gradient!(G, Λ, U::AverageDepthStates, β, t, Δx, objectives::Objectives, da::DiscreteAdjointSWE)
-    ForwardDiff.gradient!(G, objectives.regularization, β)
+    # TODO: There are two kinds of functions named `gradient!`. Should rename at least one of them.
+    gradient!(G, β, objectives.regularization)
     add_bottom_source_gradient_contribution!(G, Λ, U.U, t, objectives.design_indices, da)
 end
 

@@ -141,7 +141,7 @@ end
                                         terminal_objective=OptimalBath.Mass(),
                                         objective_indices=3:N,
                                         design_indices=1:N-1,
-                                        regularization=β -> sum(β.^2))
+                                        regularization=L2())
     objective_average = OptimalBath.compute_objective(U, t, step(x), β, objectives, ForwardEuler)
     objective_reconstructed = OptimalBath.compute_objective(Ul, Ur, t, step(x), β, objectives, ForwardEuler)
     @test objective_average ≈ objective_reconstructed

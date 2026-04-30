@@ -6,6 +6,27 @@ struct SquaredMomentum <: Objective end
 struct Mass <: Objective end
 struct NoObjective <: Objective end
 
+struct ScaledObjective{ObjType, FloatType} <: Objective
+    scale::FloatType
+    objective::ObjType
+end
+
+function Base.:*(scale::Number, objective::Objective)
+    return ScaledObjective(scale, objective)
+end
+
+function objective_density(obj::ScaledObjective, U)
+    return obj.scale * objective_density(obj.objective, U)
+end
+
+function objective_density_gradient(obj::ScaledObjective, U)
+    return obj.scale .* objective_density_gradient(obj.objective, U)
+end
+
+function Base.show(io::IO, objective::ScaledObjective)
+    return print(io, "$(objective.scale) * $(repr(objective.objective))")
+end
+
 function Base.Broadcast.broadcastable(obj::Objective) 
     return Ref(obj)
 end
@@ -35,8 +56,7 @@ function objective_density(::SquaredMomentum, U)
 end
 
 function objective_density(::Mass, U)
-    return U[1]
-    # return U[1]^2
+    return  U[1]
 end
 
 function objective_density(::NoObjective, U)
