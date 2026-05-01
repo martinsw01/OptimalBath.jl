@@ -1,3 +1,5 @@
+export ADGradient
+
 abstract type ADGradient <: GradientType end
 
 """
@@ -43,20 +45,21 @@ end
 function compute_objective_and_gradient!(G, β, spec::SolverSpec, objectives::Objectives, ad::ADGradient)
     function solve_and_compute_objective(β)
         db = extrapolate_β_to_full_domain(β, objectives.design_indices, size(spec.problem.initial_bathymetry))
-        objective = objectives.regularization(β)
+        
+        objective = Ref(objectives.regularization(β))
 
         solver = build_solver(spec, eltype(β))
         Δx = compute_Δx(solver)
 
-        U_depth = similar(spec.problem.U0, Depth, Average, typeof(objective))
+        U_depth = similar(spec.problem.U0, Depth, Average, eltype(objective))
         to_depth!(U_depth, spec.problem.U0, spec.problem.initial_bathymetry)
 
-        f_prev = typeof(objective)(sum(objective_density(objectives.interior_objective, U_depth, objectives.objective_indices)))
+        f_prev = eltype(objective)(sum(objective_density(objectives.interior_objective, U_depth, objectives.objective_indices)))
         function integrate_objective_one_step(U_n, t_n, Δt)
             adjusted_bathymetry = get_bathymetry(solver)
             to_depth!(U_depth, U_n, adjusted_bathymetry)
             f_next = sum(objective_density(objectives.interior_objective, U_depth, objectives.objective_indices))
-            objective += interior_objective_increment(f_prev, f_next, Δt, Δx, spec.solver_options.timestepper)
+            objective[] += interior_objective_increment(f_prev, f_next, Δt, Δx, spec.solver_options.timestepper)
             f_prev = f_next
         end
 
@@ -68,9 +71,9 @@ function compute_objective_and_gradient!(G, β, spec::SolverSpec, objectives::Ob
                                            U_depth,
                                            objectives.objective_indices)
 
-        objective += sum(densities) * prod(Δx)
+        objective[] += sum(densities) * prod(Δx)
 
-        return objective
+        return objective[]
     end
 
     gradient!(ad, solve_and_compute_objective, β)

@@ -1,3 +1,5 @@
+export ReverseADGradient
+
 using ReverseDiff, DiffResults
 
 struct ReverseADGradient{GradientBuffer} <: ADGradient
