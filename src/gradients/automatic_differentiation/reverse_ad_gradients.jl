@@ -19,14 +19,8 @@ function update_and_get_bathymetry!(ad::ReverseADGradient, swe_problem::PrimalSW
     return bathymetry
 end
 
-function gradient!(ad::ReverseADGradient, f, β)
-    ReverseDiff.gradient!(ad.gradient_buffer, f, β)
-end
-
-function get_gradient(ad::ReverseADGradient)
-    return ad.gradient_buffer.derivs[1]
-end
-
-function get_objective(ad::ReverseADGradient)
+function gradient!(f, g, β, spec, objectives, ad::ReverseADGradient)
+    ReverseDiff.gradient!(ad.gradient_buffer, β -> f(β, spec, objectives), β)
+    g .= ad.gradient_buffer.derivs[1]
     return ad.gradient_buffer.value
 end

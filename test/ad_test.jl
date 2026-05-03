@@ -24,16 +24,8 @@ struct TestADGradient <: ADGradient
     TestADGradient() = new([0.0])
 end
 
-function gradient!(ad::TestADGradient, f, β)
-    ad.objective[1] = f(β)
-end
-
-function get_objective(ad::TestADGradient)
-    return ad.objective[1]
-end
-
-function get_gradient(::TestADGradient)
-    return 1.0
+function gradient!(f, g, β, spec, objectives, ad::TestADGradient)
+    ad.objective[1] = f(β, spec, objectives)
 end
 
 function update_and_get_bathymetry!(ad::TestADGradient, swe_problem::PrimalSWEProblem, indices, β)

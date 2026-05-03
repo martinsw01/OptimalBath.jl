@@ -43,44 +43,44 @@ function compute_objective_and_gradient!(G, β, p::PrimalSWESolver, o::Objective
 end
 
 function compute_objective_and_gradient!(G, β, spec::SolverSpec, objectives::Objectives, ad::ADGradient)
-    function solve_and_compute_objective(β)
-        db = extrapolate_β_to_full_domain(β, objectives.design_indices, size(spec.problem.initial_bathymetry))
-        
-        objective = Ref(objectives.regularization(β))
 
-        solver = build_solver(spec, eltype(β))
-        Δx = compute_Δx(solver)
-
-        U_depth = similar(spec.problem.U0, Depth, Average, eltype(objective))
-        to_depth!(U_depth, spec.problem.U0, spec.problem.initial_bathymetry)
-
-        f_prev = eltype(objective)(sum(objective_density(objectives.interior_objective, U_depth, objectives.objective_indices)))
-        function integrate_objective_one_step(U_n, t_n, Δt)
-            adjusted_bathymetry = get_bathymetry(solver)
-            to_depth!(U_depth, U_n, adjusted_bathymetry)
-            f_next = sum(objective_density(objectives.interior_objective, U_depth, objectives.objective_indices))
-            objective[] += interior_objective_increment(f_prev, f_next, Δt, Δx, spec.solver_options.timestepper)
-            f_prev = f_next
-        end
-
-        integration_callback = create_callback(integrate_objective_one_step, solver)
-
-        solve_primal(solver, db, integration_callback)
-
-        densities = objective_density(objectives.terminal_objective,
-                                           U_depth,
-                                           objectives.objective_indices)
-
-        objective[] += sum(densities) * prod(Δx)
-
-        return objective[]
-    end
-
-    gradient!(ad, solve_and_compute_objective, β)
-    objective = get_objective(ad)
-    G .= get_gradient(ad)
+    objective = gradient!(solve_and_compute_objective, G, β, spec, objectives, ad)
 
     return objective
+end
+
+function solve_and_compute_objective(β, spec::SolverSpec, objectives::Objectives)
+    db = extrapolate_β_to_full_domain(β, objectives.design_indices, size(spec.problem.initial_bathymetry))
+    
+    objective = Ref(objectives.regularization(β))
+
+    solver = build_solver(spec, eltype(β))
+    Δx = compute_Δx(solver)
+
+    U_depth = similar(spec.problem.U0, Depth, Average, eltype(objective))
+    to_depth!(U_depth, spec.problem.U0, spec.problem.initial_bathymetry)
+
+    f_prev = Ref(zero(objective[]))
+    f_prev[] = sum(objective_density(objectives.interior_objective, U_depth, objectives.objective_indices))
+    function integrate_objective_one_step(U_n, t_n, Δt)
+        adjusted_bathymetry = get_bathymetry(solver)
+        to_depth!(U_depth, U_n, adjusted_bathymetry)
+        f_next = sum(objective_density(objectives.interior_objective, U_depth, objectives.objective_indices))
+        objective[] += interior_objective_increment(f_prev[], f_next, Δt, Δx, spec.solver_options.timestepper)
+        f_prev[] = f_next
+    end
+
+    integration_callback = create_callback(integrate_objective_one_step, solver)
+
+    solve_primal(solver, db, integration_callback)
+
+    densities = objective_density(objectives.terminal_objective,
+                                        U_depth,
+                                        objectives.objective_indices)
+
+    objective[] += sum(densities) * prod(Δx)
+
+    return objective[]
 end
 
 function interior_objective_increment(f_prev, f_next, Δt, Δx, ::ForwardEuler)
@@ -93,3 +93,5 @@ end
 
 include("forward_ad_gradients.jl")
 include("reverse_ad_gradients.jl")
+include("enzyme_gradients.jl")
+include("mooncake_gradients.jl")
