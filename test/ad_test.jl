@@ -6,8 +6,8 @@
     β = rand(4) .- 0.5
     objectives = OptimalBath.Objectives(design_indices=[1, 2, 5, 8], interior_objective=OptimalBath.Mass())
 
-    forward_gradient_type = OptimalBath.ForwardADGradient(bathymetry, β)
-    reverse_gradient_type = OptimalBath.ReverseADGradient(β)
+    forward_gradient_type = OptimalBath.ForwardADGradient(β, test_spec, objectives)
+    reverse_gradient_type = OptimalBath.ReverseADGradient()
 
     forward_objective, forward_gradient = OptimalBath.compute_objective_and_gradient(β, test_spec, objectives, forward_gradient_type)
     reverse_objective, reverse_gradient = OptimalBath.compute_objective_and_gradient(β, test_spec, objectives, reverse_gradient_type)
@@ -16,22 +16,12 @@
     @test forward_gradient ≈ reverse_gradient
 end
 
-using OptimalBath: ADGradient, State, States, Depth, Average
-import OptimalBath: gradient!, get_objective, get_gradient, update_and_get_bathymetry!, build_solver, get_bathymetry
+struct TestADBackend end
+TestADGradient() = ADGradient(TestADBackend())
 
-struct TestADGradient <: ADGradient
-    objective
-    TestADGradient() = new([0.0])
-end
-
-function gradient!(f, g, β, spec, objectives, ad::TestADGradient)
-    ad.objective[1] = f(β, spec, objectives)
-end
-
-function update_and_get_bathymetry!(ad::TestADGradient, swe_problem::PrimalSWEProblem, indices, β)
-    bathymetry = copy(swe_problem.initial_bathymetry)
-    bathymetry[indices] .+= β
-    return bathymetry
+function OptimalBath.gradient!(f, g, β, spec, objectives, ::ADGradient{Nothing, TestADBackend})
+    g .= 0.0
+    return f(β, spec, objectives)
 end
 
 struct ObjectiveMockBackend <: SolverBackend
@@ -48,7 +38,7 @@ struct ObjectiveMockBackend <: SolverBackend
     end
 end
 
-function build_solver(spec::SolverSpec{P, ObjectiveMockBackend, SO}, float_type) where {P, SO}
+function OptimalBath.build_solver(spec::SolverSpec{P, ObjectiveMockBackend, SO}, float_type) where {P, SO}
     return ObjectiveMockSolver(spec.backend, spec.solver_options.timestepper)
 end
 
@@ -67,16 +57,16 @@ struct ObjectiveMockSolver{TimeStepperType} <: PrimalSWESolver{NoReconstruction,
     end
 end
 
-compute_Δx(problem::ObjectiveMockSolver) = step(problem.x)
+OptimalBath.compute_Δx(problem::ObjectiveMockSolver) = step(problem.x)
 
-create_callback(f, ::ObjectiveMockSolver) = f
+OptimalBath.create_callback(f, ::ObjectiveMockSolver) = f
 
-initial_state(problem::ObjectiveMockSolver) = States{Average, Elevation}(problem.U[:, 1])
+OptimalBath.initial_state(problem::ObjectiveMockSolver) = States{Average, Elevation}(problem.U[:, 1])
 
-get_bathymetry(solver::ObjectiveMockSolver) = solver.bathymetry
+OptimalBath.get_bathymetry(solver::ObjectiveMockSolver) = solver.bathymetry
 
 
-function solve_primal(solver::ObjectiveMockSolver, δb, callback)
+function OptimalBath.solve_primal(solver::ObjectiveMockSolver, δb, callback)
     U, t, x = solve_primal(solver, δb)
 
     N, M = size(U.U)
@@ -87,7 +77,7 @@ function solve_primal(solver::ObjectiveMockSolver, δb, callback)
     end
 end
 
-function solve_primal(solver::ObjectiveMockSolver, δb)
+function OptimalBath.solve_primal(solver::ObjectiveMockSolver, δb)
     solver.bathymetry .= solver.initial_bathymetry .+ δb
     U = States{Average, Elevation}(copy(solver.U))
     OptimalBath.adjust_to_bathymetry_changes!(U, δb)

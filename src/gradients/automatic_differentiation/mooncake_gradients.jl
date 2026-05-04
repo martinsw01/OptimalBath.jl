@@ -1,12 +1,7 @@
-export MooncakeGradient
+export MooncakeGradient, MooncakeBackend
 
-using Mooncake
-using DifferentiationInterface
+import Mooncake
 
-struct MooncakeGradient{GradientBuffer} <: ADGradient end
-
-function gradient!(f, g, β, spec, objectives, ::MooncakeGradient)
-    backend = AutoMooncake(; config=nothing)
-    objective, _ = value_and_gradient!(f, g, backend, β, Const(spec), Const(objectives))
-    return objective
-end
+const MooncakeBackend() = DI.AutoMooncake()
+const MooncakeGradient{Preparation} = ADGradient{Preparation, <:DI.AutoMooncake}
+const MooncakeGradient(args...) = ADGradient(MooncakeBackend(), args...)

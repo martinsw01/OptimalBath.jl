@@ -1,26 +1,27 @@
-export ReverseADGradient
+export ReverseADGradient, ReverseDiffBackend
 
-using ReverseDiff, DiffResults
+import ReverseDiff
 
-struct ReverseADGradient{GradientBuffer} <: ADGradient
-    gradient_buffer::GradientBuffer
-    function ReverseADGradient(β)
-        value = first(β)
-        derivs = similar(β)
-        gradient_buffer = DiffResults.DiffResult(value, derivs)
-        GB = typeof(gradient_buffer)
-        return new{GB}(gradient_buffer)
-    end
+const ReverseDiffBackend(; compile=Val(false)) = DI.AutoReverseDiff(compile=compile)
+const ReverseADGradient{Preparation} = ADGradient{Preparation, <:DI.AutoReverseDiff}
+const ReverseADGradient(args...; compile=Val(false)) = ADGradient(ReverseDiffBackend(compile=compile), args...)
+
+struct ReverseDiffPreparation{FunctionType, DIPreparation}
+    f::FunctionType
+    di_preparation::DIPreparation
 end
 
-function update_and_get_bathymetry!(ad::ReverseADGradient, swe_problem::PrimalSWEProblem, indices, β)
-    bathymetry = eltype(β).(swe_problem.initial_bathymetry)
-    bathymetry[indices] .+= β
-    return bathymetry
+function gradient!(f, g, β, spec, objectives, ad::ADGradient{<:ReverseDiffPreparation})
+    objective, _ = DI.value_and_gradient!(ad.preparation.f, g, ad.preparation.di_preparation, ad.ad_backend, β)
+    return objective
 end
 
-function gradient!(f, g, β, spec, objectives, ad::ReverseADGradient)
-    ReverseDiff.gradient!(ad.gradient_buffer, β -> f(β, spec, objectives), β)
-    g .= ad.gradient_buffer.derivs[1]
-    return ad.gradient_buffer.value
+function prepare_gradient(f, ad_backend::DI.AutoReverseDiff, β, spec::SolverSpec, objectives::Objectives)
+    @assert ad_backend.compile "ReverseDiff preparation with compile=false makes preparation obsolete. Use ReverseDiffBackend(compile=true) instead."
+    @warn "Preparing the gradient with ReverseDiff should only be used for benchmarking purposes.\nThe gradient will now unlikely be correct, unless the parameters β are the same as those used in the preparation step, defeating the purpose of preparing the gradient in the first place."
+    # DI will not record the wengert list if it is given context such as DI.Constant(spec) and DI.Constant(objectives).
+    # We must therefore create a closure that captures the context and prepare the gradient with that closure.
+    f_closure(β) = f(β, spec, objectives)
+    prep = DI.prepare_gradient(f_closure, ad_backend, β)
+    return ReverseDiffPreparation(f_closure, prep)
 end

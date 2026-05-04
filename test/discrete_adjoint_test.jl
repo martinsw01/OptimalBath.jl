@@ -121,7 +121,7 @@ function compare_to_ad(N, compute_U0, initial_bathymetry, β)
         interior_objective=KineticEnergy(),
         terminal_objective=KineticEnergy(),
     )
-    forward_ad = ForwardADGradient(β)
+    forward_ad = ForwardADGradient()
     discrete_adjoint = DiscreteAdjointGradient(solver)
     da_objective, da_gradient = compute_objective_and_gradient(β, solver, objectives, discrete_adjoint)
     forward_ad_objective, forward_ad_gradient = compute_objective_and_gradient(β, spec, objectives, forward_ad)
@@ -141,7 +141,7 @@ function compare_to_2D_ad(N, compute_U0, initial_bathymetry, β)
         objective_indices=CartesianIndices(N),
         design_indices=CartesianIndices(N .+ 1),
     )
-    forward_ad = ForwardADGradient(β)
+    forward_ad = ForwardADGradient()
     discrete_adjoint = DiscreteAdjointGradient(solver)
     da_objective, da_gradient = compute_objective_and_gradient(β, solver, objectives, discrete_adjoint)
     forward_ad_objective, forward_ad_gradient = compute_objective_and_gradient(β, spec, objectives, forward_ad)
