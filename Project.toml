@@ -5,9 +5,11 @@ authors = ["martinsw01 <martin.s.winther@gmail.com>"]
 
 [deps]
 DiffResults = "163ba53b-c6d8-5494-b064-1a9d43ac40c5"
+DifferentiationInterface = "a0c0ee7d-e4b9-4e03-894e-1c5f64a51d63"
 ElasticArrays = "fdbdab4c-e67f-52f5-8c3f-e7b388dad3d4"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
 NLSolversBase = "d41bc354-129a-5804-8e4c-c37616107c6c"
 Optim = "429524aa-4258-5aef-a3af-852621145aeb"
 Optimization = "7f7a1694-90dd-40f0-9382-eb1efda571ba"
@@ -28,8 +30,10 @@ OptimalBathPlotsExt = "Plots"
 VolumeFluxes = {url = "https://github.com/martinsw01/VolumeFluxes.jl"}
 
 [compat]
+DifferentiationInterface = "0.7"
 GLMakie = "0.13.9"
 LinearAlgebra = "1.12.0"
+Mooncake = "0.5"
 NLSolversBase = "8.0.0"
 PreallocationTools = "0.4.34"
 ReverseDiff = "1.16.2"

@@ -93,5 +93,5 @@ end
 
 include("forward_ad_gradients.jl")
 include("reverse_ad_gradients.jl")
-include("enzyme_gradients.jl")
+include("diff_interface_gradients.jl")
 include("mooncake_gradients.jl")
