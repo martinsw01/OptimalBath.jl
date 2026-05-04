@@ -8,7 +8,7 @@ It is defined as vector space of regularization terms,
 so that we can easily make linear combinations of regularization terms.
 
 ## Example
-```
+```julia-repl
 julia> regularization = 0.1 * L2() + 0.5 * SoftL1(10.0)
 0.1 * L2() + 0.5 * SoftL1(10.0)
 julia> typeof(regularization)

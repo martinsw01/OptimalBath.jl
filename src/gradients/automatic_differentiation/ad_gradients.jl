@@ -1,37 +1,31 @@
-abstract type ADGradient <: GradientType end
+export ADGradient
 
-"""
-    gradient!(ad::ADGradient, f, β)
-"""
-function gradient! end
+import DifferentiationInterface as DI
 
-"""
-    get_objective(ad::ADGradient)
-"""
-function get_objective end
-
-"""
-    get_gradient(ad::ADGradient)
-"""
-function get_gradient end
-
-"""
-    update_and_get_bathymetry!(ad::ADGradient, swe_problem::PrimalSWEProblem, indices, β)
-"""
-function update_and_get_bathymetry! end
-
-@views function extrapolate_β_to_full_domain(β, design_indices, bathymetry_size)
-    full_β = zeros(eltype(β), bathymetry_size)
-    full_β[design_indices] .= β
-    return full_β
+struct ADGradient{Preparation, ADBackend} <: GradientType
+    preparation::Preparation
+    ad_backend::ADBackend
+    function ADGradient(ad_backend, β, spec::SolverSpec, objectives::Objectives)
+        preparation = prepare_gradient(solve_and_compute_objective, ad_backend, β, spec, objectives)
+        new{typeof(preparation), typeof(ad_backend)}(preparation, ad_backend)
+    end
+    function ADGradient(ad_backend)
+        new{Nothing, typeof(ad_backend)}(nothing, ad_backend)
+    end
 end
 
-function to_real(x::Float64)
-    return x
+function gradient!(f, g, β, spec, objectives, ad::ADGradient{Nothing})
+    objective, _ = DI.value_and_gradient!(f, g, ad.ad_backend, β, DI.Constant(spec), DI.Constant(objectives))
+    return objective
 end
 
-function to_real(x)
-    return x.value
+function gradient!(f, g, β, spec, objectives, ad::ADGradient)
+    objective, _ = DI.value_and_gradient!(f, g, ad.preparation, ad.ad_backend, β, DI.Constant(spec), DI.Constant(objectives))
+    return objective
+end
+
+function prepare_gradient(f, ad_backend, β, spec::SolverSpec, objectives::Objectives)
+    return DI.prepare_gradient(f, ad_backend, β, DI.Constant(spec), DI.Constant(objectives))
 end
 
 # Automatic differentiation requires the solver to be constructed inside the AD framework, so we can only accept SolverSpecs.
@@ -41,52 +35,13 @@ function compute_objective_and_gradient!(G, β, p::PrimalSWESolver, o::Objective
 end
 
 function compute_objective_and_gradient!(G, β, spec::SolverSpec, objectives::Objectives, ad::ADGradient)
-    function solve_and_compute_objective(β)
-        db = extrapolate_β_to_full_domain(β, objectives.design_indices, size(spec.problem.initial_bathymetry))
-        objective = objectives.regularization(β)
 
-        solver = build_solver(spec, eltype(β))
-        Δx = compute_Δx(solver)
-
-        U_depth = similar(spec.problem.U0, Depth, Average, typeof(objective))
-        to_depth!(U_depth, spec.problem.U0, spec.problem.initial_bathymetry)
-
-        f_prev = typeof(objective)(sum(objective_density(objectives.interior_objective, U_depth, objectives.objective_indices)))
-        function integrate_objective_one_step(U_n, t_n, Δt)
-            adjusted_bathymetry = get_bathymetry(solver)
-            to_depth!(U_depth, U_n, adjusted_bathymetry)
-            f_next = sum(objective_density(objectives.interior_objective, U_depth, objectives.objective_indices))
-            objective += interior_objective_increment(f_prev, f_next, Δt, Δx, spec.solver_options.timestepper)
-            f_prev = f_next
-        end
-
-        integration_callback = create_callback(integrate_objective_one_step, solver)
-
-        solve_primal(solver, db, integration_callback)
-
-        densities = objective_density(objectives.terminal_objective,
-                                           U_depth,
-                                           objectives.objective_indices)
-
-        objective += sum(densities) * prod(Δx)
-
-        return objective
-    end
-
-    gradient!(ad, solve_and_compute_objective, β)
-    objective = get_objective(ad)
-    G .= get_gradient(ad)
+    objective = gradient!(solve_and_compute_objective, G, β, spec, objectives, ad)
 
     return objective
 end
 
-function interior_objective_increment(f_prev, f_next, Δt, Δx, ::ForwardEuler)
-    return f_prev * Δt * prod(Δx)
-end
-
-function interior_objective_increment(f_prev, f_next, Δt, Δx, ::RK2)
-    return 0.5 * (f_next + f_prev) * Δt * prod(Δx)
-end
 
 include("forward_ad_gradients.jl")
 include("reverse_ad_gradients.jl")
+include("mooncake_gradients.jl")
