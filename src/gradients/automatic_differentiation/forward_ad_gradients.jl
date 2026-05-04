@@ -2,9 +2,9 @@ export ForwardADGradient, ForwardDiffBackend
 
 import ForwardDiff
 
-const ForwardDiffBackend() = DI.AutoForwardDiff()
+ForwardDiffBackend() = DI.AutoForwardDiff()
 const ForwardADGradient{Preparation} = ADGradient{Preparation, <:DI.AutoForwardDiff}
-const ForwardADGradient(args...) = ADGradient(ForwardDiffBackend(), args...)
+ForwardADGradient(args...) = ADGradient(ForwardDiffBackend(), args...)
 
 # Ensure the same element is selected when there is no unique maximum
 function Base.maximum(x::AbstractArray{<:ForwardDiff.Dual})
