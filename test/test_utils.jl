@@ -73,7 +73,7 @@ function solve_primal(problem::MockSolver, δb, callback)
 end
 
 
-@testset "Test ForwardADGradient interface" begin
+@testset "Test ADGradient interface" begin
     using OptimalBath: ForwardADGradient, compute_objective_and_gradient, Objectives, Mass
 
     N = 10#rand(10:20)
@@ -85,12 +85,19 @@ end
     objectives = Objectives(design_indices=[1, 2, 5, 8], interior_objective=Mass())
     gradient_type = ForwardADGradient(β, spec, objectives)
 
-    objective, gradient = compute_objective_and_gradient(β, spec, objectives, gradient_type)
+    ad_backends = [ForwardDiffBackend(), ReverseDiffBackend()] #, MooncakeBackend()] # Skip mooncake due to extremely slow compilation time
+    objective_vec = similar(ad_backends, eltype(β))
+    gradients = similar(ad_backends, eltype(β), (length(β), length(ad_backends)))
 
-    @test no_error = true
-    
-    # @test objective ≈ 1
-    # @test gradient ≈ [1 + 0.5 * Δx, Δx, Δx, Δx]
+    for (i, ad_backend) in enumerate(ad_backends)
+        gradient_type = ADGradient(ad_backend, β, spec, objectives)
+        objective, gradient = compute_objective_and_gradient(β, spec, objectives, gradient_type)
+        objective_vec[i] = objective
+        gradients[:, i] .= gradient
+    end
+
+    @test all(objective_vec .≈ objective_vec[1])
+    @test all(eachcol(gradients) .≈ Ref(gradients[:, 1]))
 end
 
 @testset "Test ContinuousAdjointGradient interface" begin
