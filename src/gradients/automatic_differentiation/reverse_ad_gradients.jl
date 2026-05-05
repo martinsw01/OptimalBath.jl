@@ -1,4 +1,5 @@
 export ReverseADGradient, ReverseDiffBackend
+export BenchmarkReverseADGradient, BenchmarkReverseDiffBackend
 
 import ReverseDiff
 
