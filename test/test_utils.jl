@@ -83,7 +83,7 @@ end
     spec = SolverSpec(problem, MockBackend())
     Δx = 1/N
     objectives = Objectives(design_indices=[1, 2, 5, 8], interior_objective=Mass())
-    gradient_type = ForwardADGradient(bathymetry, β)
+    gradient_type = ForwardADGradient(β, spec, objectives)
 
     objective, gradient = compute_objective_and_gradient(β, spec, objectives, gradient_type)
 
