@@ -1,4 +1,4 @@
-function OptimalBath.animate_solution(Ul, Ur, t, bathymetry, grid::Grid{1}, animation_duration, ::MakieBackend)
+function OptimalBath.animate_solution(Ul, Ur, t, bathymetry, grid::Grid{1}, ::MakieBackend; duration=t[end])
     n_lifted = Observable(firstindex(t))
 
     f, ax = create_water_figure_and_axis()
@@ -16,9 +16,9 @@ function OptimalBath.animate_solution(Ul, Ur, t, bathymetry, grid::Grid{1}, anim
     plot_time(f, t, n_lifted)
     axislegend(ax)
 
-    path = tempname() * ".mp4"
-    framerate = Int(length(t) ÷ animation_duration)
-    record(f, path, eachindex(t), framerate=framerate) do n
+    path = tempname() * "_simulation_animation_1d.mp4"
+    framerate, skip_frames = compute_capped_framerate(length(t), duration)
+    record(f, path, eachindex(t)[1:skip_frames:end], framerate=framerate) do n
         n_lifted[] = n
     end
     @info "Animation saved to $path"
@@ -26,6 +26,13 @@ function OptimalBath.animate_solution(Ul, Ur, t, bathymetry, grid::Grid{1}, anim
     return f
 end
 
-function OptimalBath.animate_solution(Ul, Ur, t, bathymetry, grid::Grid{1}, backend::MakieBackend)
-    return animate_solution(Ul, Ur, t, bathymetry, grid, t[end], backend)
+function compute_capped_framerate(frames, duration, max_fps=30)
+    fps = Int(frames ÷ duration)
+    capped_fps = min(fps, max_fps)
+    skip_frames = Int(frames ÷ (capped_fps * duration))
+    return capped_fps, skip_frames
+end
+
+function OptimalBath.animate_solution(U, t, bathymetry, grid::Grid{1}, backend::MakieBackend; duration=t[end])
+    return animate_solution(U, U, t, bathymetry, grid, backend; duration=duration)
 end
