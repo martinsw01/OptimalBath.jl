@@ -62,9 +62,8 @@ function adjoint_dot_test(N, compute_U0, bathymetry)
 
     objectives = Objectives()
     Λ0 = rand(State{2, Float64}, N)
-    Δx = 1/N
 
-    Λ = solve_adjoint(Λ0, U, objectives, bathymetry, t, Δx, DiscreteAdjointSWE(solver))
+    Λ = solve_adjoint(Λ0, U, objectives, bathymetry, t, DiscreteAdjointSWE(solver))
 
     adjoint_dot_product_test = dot(δU[:, end], Λ0)
     @test adjoint_dot_product_test ≈ dot(δU0, Λ[:, 1])
@@ -103,7 +102,7 @@ function general_adjoint_dot_test(N, compute_U0, bathymetry)
     Λ0 = rand(State{2, Float64}, N)
     Δx = 1/N
     da = DiscreteAdjointSWE(solver)
-    Λ = solve_adjoint(Λ0, U, objectives, bathymetry, t, Δx, da)
+    Λ = solve_adjoint(Λ0, U, objectives, bathymetry, t, da)
 
     adjoint_dot_product_test = dot(δU[:, 1], Λ[:, 1])
 

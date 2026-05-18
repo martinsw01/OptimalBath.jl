@@ -10,18 +10,13 @@ struct ContinuousAdjointGradient{BathymetryBuffer} <: AdjointGradient
     end
 end
 
-function adjoint_solver(::PrimalSWESolver, ::ContinuousAdjointGradient)
-    return ContinuousAdjointSWE()
+function adjoint_solver(primal_solver::PrimalSWESolver, ::ContinuousAdjointGradient)
+    return ContinuousAdjointSWE(primal_solver)
 end
 
-function compute_gradient!(G, Λ, U, t, Δx, objectives::Objectives, ::ContinuousAdjointGradient)
+function compute_gradient!(G, Λ, U, β, t, Δx, objectives::Objectives, ::ContinuousAdjointSWE)
     compute_gradient!(G, Λ, U, t, objectives.design_indices)
 end
-
-function compute_gradient!(G, Λ, Ul, Ur, t, Δx, objectives::Objectives, ::ContinuousAdjointGradient)
-    compute_gradient!(G, Λ, Ul, Ur, t, objectives.design_indices)
-end
-
 
 function integrate(U, Λ, t, j)
     g = 9.81

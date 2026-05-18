@@ -37,6 +37,23 @@ Computes the spatial discretization step size `Δx` for the given `solver`.
 function compute_Δx end
 
 """
+    get_grid(solver::PrimalSWESolver)
+"""
+function get_grid end
+
+"""
+    depth_cutoff(solver::PrimalSWESolver)
+Returns the depth for which the momentum is regularized to 0.
+"""
+function depth_cutoff end
+
+"""
+    desingularize(h, p, solver::PrimalSWESolver)
+Desingularizes the velocity `p/h` uing `solver`'s desingularization strategy.
+"""
+function desingularize end
+
+"""
     create_callback(f, solver::PrimalSWESolver)
 Creates a callback function for the given `solver` that applies the function `f(U_n::States, t_n, Δt)` at each time step during the primal solve.
 """

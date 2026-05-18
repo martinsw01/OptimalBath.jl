@@ -32,7 +32,7 @@ function compute_objective_and_gradient!(G, β, solver::PrimalSWESolver{NoRecons
     Λ_end[objectives.objective_indices] .+= objective_density_gradient(objectives.terminal_objective, U, objectives.objective_indices, lastindex(t)) .* prod(Δx)
 
     adjoint = adjoint_solver(solver, ag)
-    Λ = solve_adjoint(Λ_end, U, objectives, adjusted_bathymetry, t, Δx, adjoint)
+    Λ = solve_adjoint(Λ_end, U, objectives, adjusted_bathymetry, t, adjoint)
 
     compute_gradient!(G, Λ, U, β, t, Δx, objectives, adjoint)
     objective = compute_objective(U, t, Δx, β, objectives, TS)
@@ -51,7 +51,7 @@ function compute_objective_and_gradient!(G, β, solver::PrimalSWESolver{R, TS, B
     Λ_end[objectives.objective_indices] .+= 0.5 * objective_density_gradient(objectives.terminal_objective, Ur, objectives.objective_indices, lastindex(t)) .* prod(Δx)
 
     adjoint = adjoint_solver(solver, ag)
-    Λ = solve_adjoint(Λ_end, Ul, Ur, objectives, adjusted_bathymetry, t, Δx, adjoint)
+    Λ = solve_adjoint(Λ_end, Ul, Ur, objectives, adjusted_bathymetry, t, adjoint)
 
     compute_gradient!(G, Λ, Ul, Ur, t, Δx, objectives, ag)
     objective = compute_objective(Ul, Ur, t, Δx, β, objectives, TS)

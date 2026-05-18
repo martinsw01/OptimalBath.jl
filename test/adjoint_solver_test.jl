@@ -13,14 +13,16 @@ using StaticArrays
     Λ0 = fill(SVector{2}(0., 0.), N)
     objectives = Objectives()
 
+    primal_solver = MockSolver(N, NoReconstruction())
+
     Λ_expected = fill(SVector{2}(0., 0.), size(U.U))
-    Λ = OptimalBath.solve_adjoint(Λ0, U, objectives, b, t, Δx, ContinuousAdjointSWE())
+    Λ = OptimalBath.solve_adjoint(Λ0, U, objectives, b, t, ContinuousAdjointSWE(primal_solver))
 
     @test Λ == Λ_expected
 end
 
 
-@testset "Test constant adjoint" begin
+@testset rng=Xoshiro(0x61fa7064bde40df8, 0x2a71fe64b767390b, 0xfb75cf94bb09bb76, 0xb54c8d74e69bcaee, 0xbfb557acd98ceee9) "Test constant adjoint" begin
     # Due to bc, the second component must be zero if constant
 
     N = 5
@@ -37,8 +39,10 @@ end
     Λ0 = fill(SVector{2}(λ1, λ2), N)
     objectives = Objectives()
 
+    primal_solver = MockSolver(N, NoReconstruction())
+
     Λ_expected = fill(SVector{2}(λ1, λ2), size(U.U))
-    Λ = OptimalBath.solve_adjoint(Λ0, U, objectives, b, t, Δx, ContinuousAdjointSWE())
+    Λ = OptimalBath.solve_adjoint(Λ0, U, objectives, b, t, ContinuousAdjointSWE(primal_solver))
 
     @test Λ ≈ Λ_expected skip=true
 end

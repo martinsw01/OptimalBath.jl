@@ -63,6 +63,10 @@ function desingularize(h, p, solver::VolumeFluxesSolver)
     return VolumeFluxes.desingularize(solver.simulator.system.equation, h, p)
 end
 
+function depth_cutoff(solver::VolumeFluxesSolver)
+    return solver.simulator.system.equation.depth_cutoff
+end
+
 function create_VF_grid(problem, reconstruction)
     return _create_VF_grid(problem.grid.N, problem.grid.domain, reconstruction)
 end
@@ -76,7 +80,6 @@ function _create_VF_grid(N, domain, ::NoReconstruction)
 end
 
 function _create_VF_grid(N, domain, gc)
-    # return VolumeFluxes.CartesianGrid(N...; gc=gc, boundary=VolumeFluxes.PeriodicBC(), extent = domain)
     return VolumeFluxes.CartesianGrid(N...; gc=gc, boundary=VolumeFluxes.WallBC(), extent = domain)
 end
 

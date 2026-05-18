@@ -5,15 +5,36 @@ using StaticArrays, Test
 struct MockBackend <: SolverBackend end
 
 function build_solver(spec::SolverSpec{P, MockBackend, SO}, float_type) where {P, SO}
-    return MockSolver(spec.problem.grid.N[1], spec.solver_options.reconstruction, float_type)
+    return MockSolver(spec.problem.grid, spec.solver_options.reconstruction, float_type)
 end
 
 struct MockSolver{R<:Reconstruction} <: PrimalSWESolver{R, ForwardEuler, DefaultBathymetrySource}
     initial_bathymetry
-    function MockSolver(N, r=NoReconstruction(), float_type=Float64)
-        initial_bathymetry = zeros(float_type, N + 1)
-        return new{typeof(r)}(initial_bathymetry)
+    grid
+    function MockSolver(grid::Grid{1}, r=NoReconstruction(), float_type=Float64)
+        initial_bathymetry = zeros(float_type, grid.N[1] + 1)
+        return new{typeof(r)}(initial_bathymetry, grid)
     end
+    function MockSolver(N, r=NoReconstruction(), float_type=Float64)
+        return MockSolver(Grid1D(N), r, float_type)
+    end
+end
+
+function OptimalBath.get_grid(solver::MockSolver)
+    return solver.grid
+end
+
+function OptimalBath.depth_cutoff(::MockSolver)
+    return 1e-3
+end
+
+function OptimalBath.desingularize(h, solver::MockSolver)
+    return sqrt(h^2 + OptimalBath.depth_cutoff(solver))
+end
+
+function OptimalBath.desingularize(h, p, solver::MockSolver)
+    h_desing = OptimalBath.desingularize(h, solver)
+    return p / h_desing
 end
 
 function compute_Δx(solver::MockSolver)
@@ -106,7 +127,7 @@ end
     N = 10
     bathymetry = zeros(N + 1)
     β = zeros(4)
-    solver = MockSolver(N, MinModSlope())
+    solver = MockSolver(N, NoReconstruction())
     objectives = Objectives(design_indices=[3, 4, 5, 8], interior_objective=Mass())
     gradient_type = ContinuousAdjointGradient(bathymetry)
 
