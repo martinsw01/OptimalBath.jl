@@ -9,10 +9,9 @@ struct ContinuousAdjointSWE{PrimalSolver<:PrimalSWESolver, GridT} <: AdjointSWE
     end
 end
 
-include("continuous_adjoint/numerical_adjoint_fluxes.jl")
-include("continuous_adjoint/flux_jacobian_sources.jl")
-include("continuous_adjoint/bottom_source_terms.jl")
-
+include("numerical_adjoint_fluxes.jl")
+include("flux_jacobian_sources.jl")
+include("bottom_source_terms.jl")
 
 function solve_adjoint(Λ_end, U::AverageDepthStates, objectives::Objectives, b, t, da::ContinuousAdjointSWE)
     grid = da.grid

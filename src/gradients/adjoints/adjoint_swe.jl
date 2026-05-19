@@ -27,6 +27,11 @@ function add_objective_source!(Λ, Ul, Ur, Δt, Δx, objectives::Objectives)
 end
 
 
+function time_frame(U, n)
+    return selectdim(U, ndims(U), n)
+end
+
+
 """
     primal_solver(da::AdjointSWE)
 """

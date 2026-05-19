@@ -31,6 +31,6 @@ end
 include("automatic_differentiation/ad_gradients.jl")
 include("adjoints/adjoint_gradients.jl")
 
-using .DiscreteAdjoints: DiscreteAdjointGradient, DiscreteAdjointSWE
+using .DiscreteAdjoints: DiscreteAdjointSWE
 
-export DiscreteAdjointGradient, DiscreteAdjointSWE
+export DiscreteAdjointSWE
