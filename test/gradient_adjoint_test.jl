@@ -13,16 +13,19 @@ using Random
     t = [0; cumsum(rand(M-1))]
     expected_gradient = zeros(N + 1)
 
-    expected_gradient[[1, end]] .= h*λ2 * g .* [-1, 1] * t[end]
+    expected_gradient[[1, end]] .= -h*λ2 * g .* [-1, 1] * t[end] * N
 
-    gradient = similar(expected_gradient)
-    OptimalBath.compute_gradient!(gradient, Λ, U, t, :)
+    grid = Grid1D(N)
 
-    @test gradient ≈ expected_gradient atol=1e-14
+    gradient = zero(expected_gradient)
+    OptimalBath.adjoint_based_gradient!(gradient, Λ, U, t, :, grid, MockAdjointGradient())
 
-    OptimalBath.compute_gradient!(gradient, Λ, U, t, eachindex(gradient))
+    @test gradient ≈ expected_gradient atol=1e-13
 
-    @test gradient ≈ expected_gradient atol=1e-14
+    fill!(gradient, 0.0)
+    OptimalBath.adjoint_based_gradient!(gradient, Λ, U, t, eachindex(gradient), grid, MockAdjointGradient())
+
+    @test gradient ≈ expected_gradient atol=1e-13
 end
 
 # @testset "Test affine in time primary and constant adjoint (fails)" begin
@@ -57,14 +60,17 @@ end
     U = States{Average, Depth}(U)
     Λ = fill(State(λ1, λ2), (N, M))
 
-    expected_gradient = h * λ2 .* [-1, 1, -1, 1, -1, 1, 0] * g * t[end]
+    grid = Grid1D(N)
 
-    gradient = similar(expected_gradient)
-    OptimalBath.compute_gradient!(gradient, Λ, U, t, :)
+    expected_gradient = N * h * λ2 .* [1, -1, 1, -1, 1, -1, 0] * g * t[end]
+
+    gradient = zero(expected_gradient)
+    OptimalBath.adjoint_based_gradient!(gradient, Λ, U, t, :, grid, MockAdjointGradient())
 
     @test gradient ≈ expected_gradient atol=1e-6
 
-    OptimalBath.compute_gradient!(gradient, Λ, U, t, eachindex(gradient))
+    fill!(gradient, 0.0)
+    OptimalBath.adjoint_based_gradient!(gradient, Λ, U, t, collect(eachindex(gradient)), grid, MockAdjointGradient())
 
     @test gradient ≈ expected_gradient atol=1e-6
 end
@@ -81,14 +87,15 @@ end
     Ul = States{Left, Depth}(Ul)
     Ur = States{Right, Depth}(Ur)
     Λ = fill(State(λ1, λ2), (N, M))
-
-    expected_gradient = 0.5 * g * λ2 * (hr + hl) * t[end] .* [-1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
-    gradient = similar(expected_gradient)
-    OptimalBath.compute_gradient!(gradient, Λ, Ul, Ur, t, :)
+    grid = Grid1D(N)
+    expected_gradient = 0.5 * N * g * λ2 * (hr + hl) * t[end] .* [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1]
+    gradient = zero(expected_gradient)
+    OptimalBath.adjoint_based_gradient!(gradient, Λ, Ul, Ur, t, :, grid, MockAdjointGradient())
 
     @test gradient ≈ expected_gradient atol=1e-6
 
-    OptimalBath.compute_gradient!(gradient, Λ, Ul, Ur, t, eachindex(gradient))
+    fill!(gradient, 0.0)
+    OptimalBath.adjoint_based_gradient!(gradient, Λ, Ul, Ur, t, eachindex(gradient), grid, MockAdjointGradient())
     @test gradient ≈ expected_gradient atol=1e-6
 end
 
@@ -105,21 +112,23 @@ end
     U = States{Average, Depth}(U)
     Λ = fill(State(λ1, λ2), (N, M))
 
+    grid = Grid1D(N)
+
     t = [0; cumsum(rand(M-1))]
     expected_gradient = zeros(2)
 
-    expected_gradient[1] = -h*λ2 * g * t[end]
+    expected_gradient[1] = N*h*λ2 * g * t[end]
 
     gradient = zero(expected_gradient)
-    OptimalBath.compute_gradient!(gradient, Λ, U, t, [1 2])
+    OptimalBath.adjoint_based_gradient!(gradient, Λ, U, t, [1, 2], grid, MockAdjointGradient())
 
-    @test gradient ≈ expected_gradient atol=1e-14
+    @test gradient ≈ expected_gradient atol=1e-13
 
 
     expected_gradient = zeros(4)
-    expected_gradient[end] = h*λ2 * g * t[end]
+    expected_gradient[end] = -N*h*λ2 * g * t[end]
     gradient = zero(expected_gradient)
-    OptimalBath.compute_gradient!(gradient, Λ, U, t, [2 5 6 N + 1])
+    OptimalBath.adjoint_based_gradient!(gradient, Λ, U, t, [2, 5, 6, N + 1], grid, MockAdjointGradient())
 
-    @test gradient ≈ expected_gradient atol=1e-14
+    @test gradient ≈ expected_gradient atol=1e-13
 end

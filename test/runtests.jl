@@ -7,6 +7,10 @@ using Test
     #     JET.test_package(OptimalBath; target_defined_modules = true)
     # end
 
+    @testset "Implementation of interfaces" begin
+        include("test_utils.jl")
+    end
+
     @testset "Adjoint approach gradient" begin
         include("gradient_adjoint_test.jl")
     end
@@ -17,10 +21,6 @@ using Test
 
     @testset "Adjoint solver" begin
         include("adjoint_solver_test.jl")
-    end
-
-    @testset "Implementation of interfaces" begin
-        include("test_utils.jl")
     end
 
     @testset "Forward vs reverse mode AD gradients" begin

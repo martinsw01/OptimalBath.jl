@@ -67,6 +67,10 @@ function depth_cutoff(solver::VolumeFluxesSolver)
     return solver.simulator.system.equation.depth_cutoff
 end
 
+function get_grid(solver::VolumeFluxesSolver)
+    return solver.problem.grid
+end
+
 function create_VF_grid(problem, reconstruction)
     return _create_VF_grid(problem.grid.N, problem.grid.domain, reconstruction)
 end

@@ -21,7 +21,7 @@ function compare_to_AD(regularizations, β)
             g = similar(β)
             g_expected = zero(β)
 
-            gradient!(g, β, regularization)
+            regularization_gradient!(g, β, regularization)
             add_gradient!(g_expected, β, 1, x -> regularization(x))
 
             @test g ≈ g_expected

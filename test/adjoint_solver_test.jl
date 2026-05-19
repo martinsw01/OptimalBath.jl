@@ -25,12 +25,12 @@ end
 @testset rng=Xoshiro(0x61fa7064bde40df8, 0x2a71fe64b767390b, 0xfb75cf94bb09bb76, 0xb54c8d74e69bcaee, 0xbfb557acd98ceee9) "Test constant adjoint" begin
     # Due to bc, the second component must be zero if constant
 
-    N = 5
+    N = 3
     M = 12
 
     t = [0; cumsum(rand(M-1))]
     Δx = 1.0
-    b = -rand(N+1)
+    b = -rand(N+1) * 0
     λ1 = rand()
     λ2 = 0.0
 

@@ -121,7 +121,16 @@ end
     @test all(eachcol(gradients) .≈ Ref(gradients[:, 1]))
 end
 
-@testset "Test ContinuousAdjointGradient interface" begin
+struct MockAdjointSolver <: AdjointSWE end
+function OptimalBath.solve_adjoint(Λ_end, U::AverageDepthStates, objectives::Objectives, b, t, da::MockAdjointSolver)
+    Λ = zero(U.U)
+    return Λ
+end
+function MockAdjointGradient()
+    return AdjointApproachGradient(MockAdjointSolver())
+end
+
+@testset "Test AdjointApproachGradient interface" begin
     using OptimalBath: ContinuousAdjointGradient, compute_objective_and_gradient
 
     N = 10
@@ -129,7 +138,7 @@ end
     β = zeros(4)
     solver = MockSolver(N, NoReconstruction())
     objectives = Objectives(design_indices=[3, 4, 5, 8], interior_objective=Mass())
-    gradient_type = ContinuousAdjointGradient(bathymetry)
+    gradient_type = MockAdjointGradient()
 
     objective, gradient = compute_objective_and_gradient(β, solver, objectives, gradient_type)
     
