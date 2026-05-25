@@ -6,6 +6,7 @@ export BathymetrySourceTerm, DefaultBathymetrySource
 abstract type SolverBackend end
 
 abstract type Reconstruction end
+abstract type WellBalancedReconstruction <: Reconstruction end
 
 abstract type TimeStepper end
 
@@ -15,7 +16,7 @@ struct DefaultBathymetrySource <: BathymetrySourceTerm end
 
 abstract type PrimalSWESolver{R<:Reconstruction, TS<:TimeStepper, BS<:BathymetrySourceTerm} end
 
-abstract type LinearReconstruction <: Reconstruction end
+abstract type LinearReconstruction <: WellBalancedReconstruction end
 
 struct NoReconstruction <: Reconstruction end
 
