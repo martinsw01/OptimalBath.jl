@@ -1,4 +1,22 @@
-function add_bottom_source!(Λ, n, Δt, b, dir, grid, da::ContinuousAdjointSWE)
+export AverageBottomSource
+
+function add_bottom_source!(Λ, n, Δt, b, dir, grid, ::SimpleBottomSource)
+    for_each_cell(grid) do j
+        Δb = b_at(Right, b, j, dir) - b_at(Left, b, j, dir)
+        Λ[j, n] += compute_bottom_source_term(Λ[j, n+1], Δb, Δt, dir)
+    end
+end
+
+
+"""
+    AverageBottomSource <: AdjointBottomSource
+
+A bottom source balanced with `OuterCentralDifferenceFlux` when using `NoReconstruction`. Uses the central difference of the average
+bottom topography in the left and right cells.`
+"""
+struct AverageBottomSource <: AdjointBottomSource end
+
+function add_bottom_source!(Λ, n, Δt, b, dir, grid, ::AverageBottomSource)
     for_each_left_boundary_directional_stencil(dir, grid) do center, right
         Δb = compute_Δb(b, center, right)
         Λ[center, n] += compute_bottom_source_term(Λ[center, n+1], Δb, Δt, dir)

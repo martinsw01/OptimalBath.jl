@@ -20,7 +20,7 @@ function add_flux_spatial_derivative!(Λ, U_left, U_right, n, Δt, dir, grid, da
 end
 
 function compute_flux_jacobian_contribution(Λc, U_right_left, U_left_center, U_right_center, U_left_right, Δt, Δx, dir, da::ContinuousAdjointSWE)
-    return flux_jacobian_spatial_derivative(U_right_left, U_left_center, U_right_center, U_left_right, Δx, dir, da) * Λc .* Δt
+    return flux_jacobian_spatial_derivative(U_right_left, U_left_center, U_right_center, U_left_right, Δx, dir, da.flux_jacobian_divergence, da) * Λc .* Δt
 end
 
 function compute_left_flux_jacobian_contribution(Λc, U_left_center, U_right_center, U_left_right, Δt, Δx, dir, da::ContinuousAdjointSWE)
@@ -33,26 +33,22 @@ function compute_right_flux_jacobian_contribution(Λc, U_right_left, U_left_cent
     return compute_flux_jacobian_contribution(Λc, U_right_left, U_left_center, U_right_center, U_left_right, Δt, Δx, dir, da)
 end
 
-function flux_jacobian_spatial_derivative(U_right_left, U_left_center, U_right_center, U_left_right, Δx, dir, da::ContinuousAdjointSWE)
-    dfdUᵀ_r = interface_jacobian(U_right_center, U_left_right, dir, da)
-    dfdUᵀ_l = interface_jacobian(U_right_left, U_left_center, dir, da)
-    return -(dfdUᵀ_r .- dfdUᵀ_l) ./ Δx
-end
+"""
+    flux_jacobian_spatial_derivative(U_right_left, U_left_center, U_right_center, U_left_right, Δx, dir, ::FluxJacobianDivergence, ::ContinuousAdjointSWE)
 
+Approximates the derivative of the flux Jacobian along `dir`.
 
-function interface_jacobian(Ul, Ur, dir, da::ContinuousAdjointSWE)
-    fl = primal_flux_jacobian_transpose(Ul, dir, da)
-    fr = primal_flux_jacobian_transpose(Ur, dir, da)
+## Arguments
+- `U_right_left`: Right reconstruction of the left state
+- `U_left_center`: Left reconstruction of the center state
+- `U_right_center`: Right reconstruction of the center state
+- `U_left_right`: Left reconstruction of the right state
+- `Δx`: Grid spacing in the direction of interest
+- `dir`: Direction of differentiation
+- `::FluxJacobianDivergence`: Type of flux Jacobian divergence to use (for dispatch)
+- `::ContinuousAdjointSWE`: Type indicator for dispatch
+"""
+function flux_jacobian_spatial_derivative end
 
-    eig_left⁺, eig_left⁻ = compute_eigenvalues(Ul, dir, da)
-    eig_right⁺, eig_right⁻ = compute_eigenvalues(Ur, dir, da)
-
-    a⁺ = max(eig_left⁺, eig_right⁺, 0.0)
-    a⁻ = min(eig_left⁻, eig_right⁻, 0.0)
-
-    if a⁺ - a⁻ < 1e-6
-        return zero(fl)
-    end
-
-    return (a⁺ * fl - a⁻ * fr) / (a⁺ - a⁻)
-end
+include("balanced_flux_jacobian_divergence.jl")
+include("central_difference_flux_jacobian.jl")

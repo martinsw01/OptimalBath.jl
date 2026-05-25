@@ -1,4 +1,4 @@
-export ContinuousAdjointSWE
+export ContinuousAdjointSWE, AdjointSpec, BalancedFluxJacobianDivergence, SimpleBottomSource
 
 abstract type FluxJacobianDivergence end
 abstract type AdjointBottomSource end
@@ -6,6 +6,11 @@ abstract type AdjointBottomSource end
 struct BalancedFluxJacobianDivergence <: FluxJacobianDivergence end
 struct SimpleBottomSource <: AdjointBottomSource end
 
+"""
+    AdjointSpec{FluxJacobianDivergence, AdjointBottomSource, PrimalReconstruction}
+
+Specification of the numerical methods used in the continuous adjoint.
+"""
 struct AdjointSpec{FJD, ABS, PrimalReconstruction}
     flux_jacobian_divergence::FJD
     bottom_source::ABS
@@ -37,7 +42,7 @@ struct ContinuousAdjointSWE{PrimalSolver, GridT, FJD, ABS, R} <: AdjointSWE
 end
 
 include("numerical_adjoint_fluxes.jl")
-include("flux_jacobian_sources.jl")
+include("flux_jacobian_sources/flux_jacobian_sources.jl")
 include("bottom_source_terms.jl")
 
 function solve_adjoint(Λ_end, U::AverageDepthStates, objectives::Objectives, b, t, da::ContinuousAdjointSWE)
@@ -48,8 +53,7 @@ function solve_adjoint(Λ_end, U::AverageDepthStates, objectives::Objectives, b,
     Λ = similar(U.U)
     time_frame(Λ, M) .= Λ_end
 
-    U_left = similar(time_frame(U.U, 1))
-    U_right = similar(U_left)
+    U_left, U_right = reconstruction_buffers(time_frame(U.U, 1), da.primal_reconstruction)
 
     for n in M-1:-1:1
         Δt = t[n+1] - t[n]
@@ -58,7 +62,7 @@ function solve_adjoint(Λ_end, U::AverageDepthStates, objectives::Objectives, b,
             reconstruct!(U_left, U_right, time_frame(U.U, n), b, dir, grid, da.primal_reconstruction)
             add_adjoint_flux!(Λ, U_left, U_right, n, Δt, dir, grid, da)
             add_flux_spatial_derivative!(Λ, U_left, U_right, n, Δt, dir, grid, da)
-            add_bottom_source!(Λ, n, Δt, b, dir, grid, da)
+            add_bottom_source!(Λ, n, Δt, b, dir, grid, da.bottom_source)
         end
         add_objective_source!(Λ, U.U, n, Δt, Δx, objectives, da)
     end

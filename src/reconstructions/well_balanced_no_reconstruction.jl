@@ -1,5 +1,10 @@
 struct WellBalancedNoReconstruction <: WellBalancedReconstruction end
 
+function reconstruction_buffers(U, ::Reconstruction)
+    U_left = similar(U)
+    U_right = similar(U)
+    return U_left, U_right
+end
 
 function reconstruct_side(W::State{2}, b_side)
     h_side = height(W) - b_side
