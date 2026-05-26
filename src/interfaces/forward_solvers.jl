@@ -1,5 +1,5 @@
 export PrimalSWESolver, SolverBackend, solve_primal
-export Reconstruction, NoReconstruction, LinearReconstruction
+export Reconstruction, WellBalancedReconstruction, NoReconstruction, LinearReconstruction
 export TimeStepper, ForwardEuler, RK2
 export BathymetrySourceTerm, DefaultBathymetrySource
 

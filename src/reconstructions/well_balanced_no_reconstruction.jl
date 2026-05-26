@@ -1,3 +1,5 @@
+export WellBalancedNoReconstruction
+
 struct WellBalancedNoReconstruction <: WellBalancedReconstruction end
 
 function reconstruction_buffers(U, ::Reconstruction)

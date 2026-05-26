@@ -3,27 +3,11 @@ export ContinuousAdjointSWE, AdjointSpec, BalancedFluxJacobianDivergence, Simple
 abstract type FluxJacobianDivergence end
 abstract type AdjointBottomSource end
 
+struct MatchPrimalReconstruction end
+struct ReconstructionDependentBottomSource end
+
 struct BalancedFluxJacobianDivergence <: FluxJacobianDivergence end
 struct SimpleBottomSource <: AdjointBottomSource end
-
-"""
-    AdjointSpec{FluxJacobianDivergence, AdjointBottomSource, PrimalReconstruction}
-
-Specification of the numerical methods used in the continuous adjoint.
-"""
-struct AdjointSpec{FJD, ABS, PrimalReconstruction}
-    flux_jacobian_divergence::FJD
-    bottom_source::ABS
-    primal_reconstruction::PrimalReconstruction
-    function AdjointSpec(;fjd::FluxJacobianDivergence=BalancedFluxJacobianDivergence(),
-                         bs::AdjointBottomSource=SimpleBottomSource(),
-                         reconstruction::Reconstruction=WellBalancedNoReconstruction())
-        FJD = typeof(fjd)
-        ABS = typeof(bs)
-        PrimalReconstruction = typeof(reconstruction)
-        return new{FJD, ABS, PrimalReconstruction}(fjd, bs, reconstruction)
-    end
-end
 
 
 struct ContinuousAdjointSWE{PrimalSolver, GridT, FJD, ABS, R} <: AdjointSWE
@@ -32,13 +16,39 @@ struct ContinuousAdjointSWE{PrimalSolver, GridT, FJD, ABS, R} <: AdjointSWE
     flux_jacobian_divergence::FJD
     bottom_source::ABS
     primal_reconstruction::R
-    function ContinuousAdjointSWE(primal::PrimalSWESolver, adjoint_spec::AdjointSpec=AdjointSpec())
+    function ContinuousAdjointSWE(primal::PrimalSWESolver;
+                                  flux_jacobian_divergence=BalancedFluxJacobianDivergence(),
+                                  bottom_source=ReconstructionDependentBottomSource(),
+                                  primal_reconstruction=MatchPrimalReconstruction())
         grid = get_grid(primal)
-        fjd = adjoint_spec.flux_jacobian_divergence
-        bs = adjoint_spec.bottom_source
-        reconstruction = adjoint_spec.primal_reconstruction
-        return new{typeof(primal), typeof(grid), typeof(fjd), typeof(bs), typeof(reconstruction)}(primal, grid, fjd, bs, reconstruction)
+        resolved_reconstruction = resolve_primal_reconstruction(primal, primal_reconstruction)
+        resolved_bottom_source = resolve_bottom_source_term(resolved_reconstruction, bottom_source)
+        return new{typeof(primal),
+                   typeof(grid),
+                   typeof(flux_jacobian_divergence),
+                   typeof(resolved_bottom_source),
+                   typeof(resolved_reconstruction)}(primal,
+                                                    grid,
+                                                    flux_jacobian_divergence,
+                                                    resolved_bottom_source,
+                                                    resolved_reconstruction)
     end
+end
+
+function resolve_primal_reconstruction(::PrimalSWESolver{R}, ::MatchPrimalReconstruction) where R
+    return R()
+end
+
+function resolve_primal_reconstruction(_, reconstruction::Reconstruction)
+    return reconstruction
+end
+
+function resolve_bottom_source_term(_, bottom_source::AdjointBottomSource)
+    return bottom_source
+end
+
+function resolve_bottom_source_term(::WellBalancedReconstruction, ::ReconstructionDependentBottomSource)
+    return SimpleBottomSource()
 end
 
 include("numerical_adjoint_fluxes.jl")

@@ -145,3 +145,31 @@ end
     @test objective ≈ 1
     @test gradient ≈ [0, 0, 0, 0]
 end
+
+@testset "Test ContinuousAdjoint interface" begin
+    N = 10
+    solver = MockSolver(N, NoReconstruction())
+    da = ContinuousAdjointGradient(solver).adjoint_solver
+    @test da.flux_jacobian_divergence isa BalancedFluxJacobianDivergence
+    @test da.bottom_source isa AverageBottomSource
+    @test da.primal_reconstruction isa NoReconstruction
+
+
+    solver = MockSolver(N, WellBalancedNoReconstruction())
+    da = ContinuousAdjointGradient(solver).adjoint_solver
+    @test da.flux_jacobian_divergence isa BalancedFluxJacobianDivergence
+    @test da.bottom_source isa SimpleBottomSource
+    @test da.primal_reconstruction isa WellBalancedNoReconstruction
+
+    solver = MockSolver(N, WellBalancedNoReconstruction())
+    da = ContinuousAdjointGradient(solver, primal_reconstruction=NoReconstruction()).adjoint_solver
+    @test da.flux_jacobian_divergence isa BalancedFluxJacobianDivergence
+    @test da.bottom_source isa AverageBottomSource
+    @test da.primal_reconstruction isa NoReconstruction
+
+    solver = MockSolver(N, NoReconstruction())
+    da = ContinuousAdjointGradient(solver, bottom_source=SimpleBottomSource()).adjoint_solver
+    @test da.flux_jacobian_divergence isa BalancedFluxJacobianDivergence
+    @test da.bottom_source isa SimpleBottomSource
+    @test da.primal_reconstruction isa NoReconstruction
+end

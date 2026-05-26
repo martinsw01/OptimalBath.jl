@@ -8,8 +8,8 @@ struct AdjointApproachGradient{AdjointSolver<:AdjointSWE} <: GradientType
     adjoint_solver::AdjointSolver
 end
 
-function ContinuousAdjointGradient(primal_solver::PrimalSWESolver)
-    return AdjointApproachGradient(ContinuousAdjointSWE(primal_solver))
+function ContinuousAdjointGradient(primal_solver::PrimalSWESolver; adjoint_options...)
+    return AdjointApproachGradient(ContinuousAdjointSWE(primal_solver; adjoint_options...))
 end
 
 function DiscreteAdjointGradient(primal_solver::VolumeFluxesSolver)

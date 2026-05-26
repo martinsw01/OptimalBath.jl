@@ -40,3 +40,8 @@ function compute_bottom_source_term(Λ, Δb, Δt, dir)
     S12 = -9.81 * Δb * Δt
     return setindex(zero(Λ), S12 * momentum(Λ, dir), 1)
 end
+
+
+function resolve_bottom_source_term(::NoReconstruction, ::ReconstructionDependentBottomSource)
+    return AverageBottomSource()
+end
