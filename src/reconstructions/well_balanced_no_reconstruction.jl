@@ -8,31 +8,33 @@ function reconstruction_buffers(U, ::Reconstruction)
     return U_left, U_right
 end
 
-function reconstruct_side(W::State{2}, b_side)
-    h_side = height(W) - b_side
-    if h_side < 0
-        return zero(W)
-    else
-        return State(h_side, momentum(W, XDIR))
-    end
+function set_depth(W::State, depth)
+    return setindex(W, depth, 1)
 end
 
-function reconstruct_side(W::State{3}, b_side)
-    h_side = height(W) - b_side
-    if h_side < 0
-        return zero(W)
-    else
-        return State(h_side, momentum(W, XDIR), momentum(W, YDIR))
+function compute_depths(W::State, b_left, b_right)
+    h_left = height(W) - b_left
+    h_right = height(W) - b_right
+
+    if h_left < 0
+        h_right += h_left
+        h_left = zero(h_left)
+    elseif h_right < 0
+        h_left += h_right
+        h_right = zero(h_right)
     end
+
+    return h_left, h_right
 end
 
-# TODO: this works poorly in dry states, as it creates water on one of the sides. Replace for example with a slop-adjustment.
 function reconstruct!(out_left, out_right, W, b, dir, grid::Grid, ::WellBalancedNoReconstruction)
     for_each_cell(grid) do j
         b_left = b_at(Left, b, j, dir)
         b_right = b_at(Right, b, j, dir)
 
-        out_left[j] = reconstruct_side(W[j], b_left)
-        out_right[j] = reconstruct_side(W[j], b_right)
+        h_left, h_right = compute_depths(W[j], b_left, b_right)
+
+        out_left[j] = set_depth(W[j], h_left)
+        out_right[j] = set_depth(W[j], h_right)
     end
 end
