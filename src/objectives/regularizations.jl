@@ -1,5 +1,5 @@
 export Regularization, NoRegularization
-export gradient!, add_gradient!
+export regularization_gradient!, add_gradient!
 
 """
     Regularization
@@ -18,7 +18,7 @@ RegularizationSum{ScaledRegularization{L2, Float64}, ScaledRegularization{SoftL1
 abstract type Regularization end
 
 """
-    gradient!(g, β, regularization)
+    regularization_gradient!(g, β, regularization)
 Computes the gradient of the regularization term with respect to the bathymetry `β` and stores it in `g`.
 
 ## Example
@@ -27,7 +27,7 @@ regularization = 0.1 * L2() + 0.5 * SoftL1(10.0)
 0.1 * L2() + 0.5 * SoftL1(10.0)
 julia> β = 1.0:4.0;
 julia> g = similar(β);
-julia> gradient!(g, β, regularization)
+julia> regularization_gradient!(g, β, regularization)
 4-element Vector{Float64}:
  0.1749886505328244
  0.2249999994847116
@@ -35,7 +35,7 @@ julia> gradient!(g, β, regularization)
  0.325
 ```
 """
-function gradient!(g, β, regularization::Regularization)
+function regularization_gradient!(g, β, regularization::Regularization)
     fill!(g, zero(eltype(β)))
     add_gradient!(g, β, 1, regularization)
 end

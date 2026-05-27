@@ -1,11 +1,12 @@
 export PrimalSWESolver, SolverBackend, solve_primal
-export Reconstruction, NoReconstruction, LinearReconstruction
+export Reconstruction, WellBalancedReconstruction, NoReconstruction, LinearReconstruction
 export TimeStepper, ForwardEuler, RK2
 export BathymetrySourceTerm, DefaultBathymetrySource
 
 abstract type SolverBackend end
 
 abstract type Reconstruction end
+abstract type WellBalancedReconstruction <: Reconstruction end
 
 abstract type TimeStepper end
 
@@ -15,7 +16,7 @@ struct DefaultBathymetrySource <: BathymetrySourceTerm end
 
 abstract type PrimalSWESolver{R<:Reconstruction, TS<:TimeStepper, BS<:BathymetrySourceTerm} end
 
-abstract type LinearReconstruction <: Reconstruction end
+abstract type LinearReconstruction <: WellBalancedReconstruction end
 
 struct NoReconstruction <: Reconstruction end
 
@@ -35,6 +36,23 @@ function solve_primal end
 Computes the spatial discretization step size `Δx` for the given `solver`.
 """
 function compute_Δx end
+
+"""
+    get_grid(solver::PrimalSWESolver)
+"""
+function get_grid end
+
+"""
+    depth_cutoff(solver::PrimalSWESolver)
+Returns the depth for which the momentum is regularized to 0.
+"""
+function depth_cutoff end
+
+"""
+    desingularize(h, p, solver::PrimalSWESolver)
+Desingularizes the velocity `p/h` uing `solver`'s desingularization strategy.
+"""
+function desingularize end
 
 """
     create_callback(f, solver::PrimalSWESolver)

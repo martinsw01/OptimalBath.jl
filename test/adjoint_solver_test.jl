@@ -13,32 +13,45 @@ using StaticArrays
     Λ0 = fill(SVector{2}(0., 0.), N)
     objectives = Objectives()
 
+    primal_solver = MockSolver(N, NoReconstruction())
+
     Λ_expected = fill(SVector{2}(0., 0.), size(U.U))
-    Λ = OptimalBath.solve_adjoint(Λ0, U, objectives, b, t, Δx, ContinuousAdjointSWE())
+    Λ = OptimalBath.solve_adjoint(Λ0, U, objectives, b, t, ContinuousAdjointSWE(primal_solver))
 
     @test Λ == Λ_expected
 end
 
+struct ZeroBoundaryReconstruction <: WellBalancedReconstruction end
 
-@testset "Test constant adjoint" begin
+function OptimalBath.reconstruct!(U_left, U_right, W, b, dir, grid::Grid{1}, ::ZeroBoundaryReconstruction)
+    OptimalBath.reconstruct!(U_left, U_right, W, b, dir, grid, WellBalancedNoReconstruction())
+    U_left[1] = zero(eltype(U_left))
+    U_right[end] = zero(eltype(U_right))
+end
+
+
+@testset rng=Xoshiro(0x61fa7064bde40df8, 0x2a71fe64b767390b, 0xfb75cf94bb09bb76, 0xb54c8d74e69bcaee, 0xbfb557acd98ceee9) "Test constant adjoint" begin
     # Due to bc, the second component must be zero if constant
-
-    N = 5
+    # However, if the height at the boundary is zero, we do not
+    # have this bounadry condition on λ2.
+    N = 3
     M = 12
 
     t = [0; cumsum(rand(M-1))]
-    Δx = 1.0
-    b = -rand(N+1)
+
+    b = zeros(N+1)
     λ1 = rand()
-    λ2 = 0.0
+    λ2 = rand()
 
     U = rand(SVector{2, Float64}, N, M)
     U = States{Average, Depth}(U)
     Λ0 = fill(SVector{2}(λ1, λ2), N)
     objectives = Objectives()
 
+    primal_solver = MockSolver(N, ZeroBoundaryReconstruction())
+
     Λ_expected = fill(SVector{2}(λ1, λ2), size(U.U))
-    Λ = OptimalBath.solve_adjoint(Λ0, U, objectives, b, t, Δx, ContinuousAdjointSWE())
+    Λ = OptimalBath.solve_adjoint(Λ0, U, objectives, b, t, ContinuousAdjointSWE(primal_solver))
 
     @test Λ ≈ Λ_expected skip=true
 end

@@ -1,14 +1,15 @@
-export DiscreteAdjointSWE, TestDiscreteAdjoint, StepWiseTestDiscreteAdjoint
+module DiscreteAdjoints
+
+export DiscreteAdjointSWE
 
 using ForwardDiff: jacobian, gradient
 using VolumeFluxes: CentralUpwind, ShallowWaterEquations1D, XDIR
 using StaticArrays: @SMatrix, SMatrix, setindex
 using ElasticArrays: ElasticArray
 
-import OptimalBath: solve_adjoint
-using .OptimalBath: compute_ghost_cell, AdjointSWE, time_frame
-using .OptimalBath: Grid, for_each_left_boundary_directional_stencil, for_each_interior_directional_stencil, for_each_right_boundary_directional_stencil
-using .OptimalBath: directions
+import OptimalBath
+using OptimalBath
+using OptimalBath: time_frame, compute_ghost_cell
 
 
 struct DiscreteAdjointSWE{PrimalSolver<:VolumeFluxesSolver, GridT, AdjointStates} <: AdjointSWE
@@ -68,12 +69,8 @@ function Λ_dot_∂U∂t(Λ, U_next, U_prev, Δt)
     end / Δt
 end
 
-function desingularize(h, da::DiscreteAdjointSWE)
-    return OptimalBath.desingularize(h, da.primal)
-end
-
-function desingularize(h, p, da::DiscreteAdjointSWE)
-    return OptimalBath.desingularize(h, p, da.primal)
+function OptimalBath.primal_solver(da::DiscreteAdjointSWE)
+    return da.primal
 end
 
 function depth_cutoff(primal_solver)
@@ -86,7 +83,7 @@ function compute_max_abs_eigval(U::State, dir, da::DiscreteAdjointSWE)
         return zero(h)
     else
         p = momentum(U, dir)
-        u = desingularize(h, p, da)
+        u = OptimalBath.desingularize(h, p, da)
         c = sqrt(9.81*h)
         return abs(u) + abs(c)
     end
@@ -263,12 +260,12 @@ function time_steps(U, ::Grid{Dims}) where Dims
     return size(U, Dims+1)
 end
 
-function solve_adjoint(Λ_end, U::AverageDepthStates, objectives::Objectives, b, t, Δx, da::DiscreteAdjointSWE)
+function OptimalBath.solve_adjoint(Λ_end, U::AverageDepthStates, objectives::Objectives, b, t, da::DiscreteAdjointSWE)
     Λ = resize_adjoint_states!(da, U.U)
-    return solve_adjoint!(Λ, Λ_end, U, objectives, b, t, Δx, da)
+    return solve_adjoint!(Λ, Λ_end, U, objectives, b, t, da)
 end
 
-@views function solve_adjoint!(Λ, Λ_end, U::AverageDepthStates, objectives::Objectives, b, t, Δx, da::DiscreteAdjointSWE)
+@views function solve_adjoint!(Λ, Λ_end, U::AverageDepthStates, objectives::Objectives, b, t, da::DiscreteAdjointSWE)
     grid = da.grid
     Δx = grid.Δx
 
@@ -295,4 +292,6 @@ end
         adjoint_pre_proc_step!(Λ, U.U, n-1, grid, da) # pre processing of the next step
     end
     return Λ
+end
+
 end

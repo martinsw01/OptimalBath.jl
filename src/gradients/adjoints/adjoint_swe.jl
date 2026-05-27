@@ -25,3 +25,26 @@ function add_objective_source!(Λ, Ul, Ur, Δt, Δx, objectives::Objectives)
     add_objective_source!(Λ, Ul, Δt, Δx, objectives, 0.5)
     add_objective_source!(Λ, Ur, Δt, Δx, objectives, 0.5)
 end
+
+
+function time_frame(U, n)
+    return selectdim(U, ndims(U), n)
+end
+
+
+"""
+    primal_solver(da::AdjointSWE)
+"""
+function primal_solver end
+
+function desingularize(h, da::AdjointSWE)
+    return OptimalBath.desingularize(h, primal_solver(da))
+end
+
+function desingularize(h, p, da::AdjointSWE)
+    return OptimalBath.desingularize(h, p, primal_solver(da))
+end
+
+function depth_cutoff(da::AdjointSWE)
+    return da |> primal_solver |> OptimalBath.depth_cutoff
+end

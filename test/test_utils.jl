@@ -5,15 +5,36 @@ using StaticArrays, Test
 struct MockBackend <: SolverBackend end
 
 function build_solver(spec::SolverSpec{P, MockBackend, SO}, float_type) where {P, SO}
-    return MockSolver(spec.problem.grid.N[1], spec.solver_options.reconstruction, float_type)
+    return MockSolver(spec.problem.grid, spec.solver_options.reconstruction, float_type)
 end
 
 struct MockSolver{R<:Reconstruction} <: PrimalSWESolver{R, ForwardEuler, DefaultBathymetrySource}
     initial_bathymetry
-    function MockSolver(N, r=NoReconstruction(), float_type=Float64)
-        initial_bathymetry = zeros(float_type, N + 1)
-        return new{typeof(r)}(initial_bathymetry)
+    grid
+    function MockSolver(grid::Grid{1}, r=NoReconstruction(), float_type=Float64)
+        initial_bathymetry = zeros(float_type, grid.N[1] + 1)
+        return new{typeof(r)}(initial_bathymetry, grid)
     end
+    function MockSolver(N, r=NoReconstruction(), float_type=Float64)
+        return MockSolver(Grid1D(N), r, float_type)
+    end
+end
+
+function OptimalBath.get_grid(solver::MockSolver)
+    return solver.grid
+end
+
+function OptimalBath.depth_cutoff(::MockSolver)
+    return 1e-3
+end
+
+function OptimalBath.desingularize(h, solver::MockSolver)
+    return sqrt(h^2 + OptimalBath.depth_cutoff(solver))
+end
+
+function OptimalBath.desingularize(h, p, solver::MockSolver)
+    h_desing = OptimalBath.desingularize(h, solver)
+    return p / h_desing
 end
 
 function compute_Δx(solver::MockSolver)
@@ -100,18 +121,55 @@ end
     @test all(eachcol(gradients) .≈ Ref(gradients[:, 1]))
 end
 
-@testset "Test ContinuousAdjointGradient interface" begin
+struct MockAdjointSolver <: AdjointSWE end
+function OptimalBath.solve_adjoint(Λ_end, U::AverageDepthStates, objectives::Objectives, b, t, da::MockAdjointSolver)
+    Λ = zero(U.U)
+    return Λ
+end
+function MockAdjointGradient()
+    return AdjointApproachGradient(MockAdjointSolver())
+end
+
+@testset "Test AdjointApproachGradient interface" begin
     using OptimalBath: ContinuousAdjointGradient, compute_objective_and_gradient
 
     N = 10
     bathymetry = zeros(N + 1)
     β = zeros(4)
-    solver = MockSolver(N, MinModSlope())
+    solver = MockSolver(N, NoReconstruction())
     objectives = Objectives(design_indices=[3, 4, 5, 8], interior_objective=Mass())
-    gradient_type = ContinuousAdjointGradient(bathymetry)
+    gradient_type = MockAdjointGradient()
 
     objective, gradient = compute_objective_and_gradient(β, solver, objectives, gradient_type)
     
     @test objective ≈ 1
     @test gradient ≈ [0, 0, 0, 0]
+end
+
+@testset "Test ContinuousAdjoint interface" begin
+    N = 10
+    solver = MockSolver(N, NoReconstruction())
+    da = ContinuousAdjointGradient(solver).adjoint_solver
+    @test da.flux_jacobian_divergence isa BalancedFluxJacobianDivergence
+    @test da.bottom_source isa AverageBottomSource
+    @test da.primal_reconstruction isa NoReconstruction
+
+
+    solver = MockSolver(N, WellBalancedNoReconstruction())
+    da = ContinuousAdjointGradient(solver).adjoint_solver
+    @test da.flux_jacobian_divergence isa BalancedFluxJacobianDivergence
+    @test da.bottom_source isa SimpleBottomSource
+    @test da.primal_reconstruction isa WellBalancedNoReconstruction
+
+    solver = MockSolver(N, WellBalancedNoReconstruction())
+    da = ContinuousAdjointGradient(solver, primal_reconstruction=NoReconstruction()).adjoint_solver
+    @test da.flux_jacobian_divergence isa BalancedFluxJacobianDivergence
+    @test da.bottom_source isa AverageBottomSource
+    @test da.primal_reconstruction isa NoReconstruction
+
+    solver = MockSolver(N, NoReconstruction())
+    da = ContinuousAdjointGradient(solver, bottom_source=SimpleBottomSource()).adjoint_solver
+    @test da.flux_jacobian_divergence isa BalancedFluxJacobianDivergence
+    @test da.bottom_source isa SimpleBottomSource
+    @test da.primal_reconstruction isa NoReconstruction
 end

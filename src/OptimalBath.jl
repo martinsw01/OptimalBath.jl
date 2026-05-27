@@ -6,6 +6,8 @@ include("interfaces/forward_solvers.jl")
 include("grids.jl")
 include("solver_options.jl")
 
+include("reconstructions/well_balanced_no_reconstruction.jl")
+include("reconstructions/no_reconstruction.jl")
 include("PrimalSWE.jl")
 include("gradients/gradients.jl")
 include("solver.jl")

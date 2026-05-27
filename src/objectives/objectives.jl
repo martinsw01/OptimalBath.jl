@@ -35,6 +35,18 @@ function objective_density(obj::Objective, U::States{S, Depth, T}, I...) where {
     return objective_density.(obj, @view U.U[I...])
 end
 
+const desingularizing_kappa = 1e-5
+
+function desingularize(h, p)
+    h_star = desingularize(h)
+    return p / h_star
+end
+
+function desingularize(h)
+    h_star = copysign(1, h)*max(abs(h), min(h^2/(2*desingularizing_kappa) + desingularizing_kappa/2.0, desingularizing_kappa))
+    return h_star
+end
+
 function objective_density(::Energy, U)
     h, p = U
     u = desingularize(h, p)
@@ -42,13 +54,10 @@ function objective_density(::Energy, U)
 end
 
 function objective_density(::KineticEnergy, (h, hu...))
+    # Should use AD fallback for `objective_density_gradient` when `objective_density`
+    # uses `desingularize`. Alternatively differentiate `desingularize` too.
     u = desingularize.(h, hu)
     return 0.5 * h * sum(u.^2)
-end
-
-function objective_density_gradient(::KineticEnergy, (h, hu...))
-    u = desingularize.(h, hu)
-    SVector(-0.5 * sum(u.^2), u...)
 end
 
 function objective_density(::SquaredMomentum, U)
